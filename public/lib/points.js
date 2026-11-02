@@ -5,7 +5,7 @@ export const PROGRAMS = [
   { id: 'arcus', name: 'Arcus', url: 'https://app.arcus.xyz/rewards', scope: 'Season 1, since 1 Oct 2026', label: 'Your Season 1 points' },
   { id: 'risex', name: 'RISEx', url: 'https://rise.trade/points', scope: 'Lifetime', label: 'Your total points' },
   { id: 'variational', name: 'Variational', url: 'https://omni.variational.io/points', scope: 'Dates in your CSVs', label: 'Your total points' },
-  { id: 'ondo', name: 'Ondo', url: 'https://app.ondoperps.xyz/points', scope: 'Your own figures', label: 'Your total points' },
+  { id: 'ondo', name: 'Ondo', url: 'https://app.ondoperps.xyz/points', scope: 'Lifetime', label: 'Your total points' },
 ];
 
 export function seasonStats(fills, start, capped) {
@@ -21,7 +21,7 @@ export function seasonStats(fills, start, capped) {
 
 function figures(id, venue, manualFees, manualPnl) {
   if (id === 'arcus') return venue.season ?? null;
-  if (id === 'risex' && venue.fees) {
+  if ((id === 'risex' || id === 'ondo') && venue.fees) {
     return { fees: venue.fees.value, volume: venue.volume?.all ?? null, pnl: venue.pnl?.all ?? null };
   }
   if (id === 'variational' && (venue.fees || venue.volume)) {

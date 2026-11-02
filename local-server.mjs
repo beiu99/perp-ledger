@@ -6,6 +6,8 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import qfex from './api/qfex.js';
 import risex from './api/risex.js';
+import login from './api/login.js';
+import privateData from './api/private.js';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
 const config = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
@@ -22,6 +24,8 @@ createServer(async (req, res) => {
   const { pathname } = new URL(req.url, 'http://local');
   if (pathname === '/api/qfex') return qfex(req, res);
   if (pathname === '/api/risex') return risex(req, res);
+  if (pathname === '/api/login') return login(req, res);
+  if (pathname === '/api/private') return privateData(req, res);
   const path = normalize(pathname === '/' ? '/index.html' : pathname);
   try {
     const body = await readFile(join(root, path));

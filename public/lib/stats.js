@@ -63,7 +63,7 @@ export function summarizeFills(fills, { capped = false } = {}) {
     profitFactor: grossLoss > 0 ? grossWin / grossLoss : null,
     best: results.length ? Math.max(...results) : null,
     worst: results.length ? Math.min(...results) : null,
-    makerShare: volume > 0 ? makerVolume / volume : null,
+    makerShare: volume > 0 && fills.some((f) => f.maker !== null) ? makerVolume / volume : null,
     liquidations,
     markets: [...markets.values()].sort((a, b) => b.volume - a.volume),
   };

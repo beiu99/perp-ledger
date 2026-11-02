@@ -11,6 +11,7 @@
   --hl: #008c84;
   --arcus: #7a3fc4;
   --risex: #c2570c;
+  --qfex: #2563b8;
   --gain: #0a6b45;
   --loss: #b3261e;
   --warn: #8a5300;
@@ -29,6 +30,7 @@
     --hl: #1ea69e;
     --arcus: #9a76de;
     --risex: #cf7a24;
+    --qfex: #5e9be8;
     --gain: #5ed3a0;
     --loss: #ff9d94;
     --warn: #eebf6a;
@@ -51,9 +53,11 @@ h1 { font-size: clamp(2.2rem, 6vw, 4.2rem); line-height: 1.04; font-weight: 700;
 h2 { font-size: 1.3rem; font-weight: 700; margin: 0; }
 .brand { font-weight: 700; font-size: 1.05rem; margin: 0 0 40px; color: var(--navy); }
 
+.gate { max-width: 680px; margin: 0 auto; padding: 48px 24px; }
+.gate label { display: block; font-weight: 600; margin-bottom: 6px; }
 .lookup label { display: block; font-weight: 600; margin-bottom: 6px; }
 .lookup-row { display: flex; gap: 8px; max-width: 680px; }
-input[type='text'], #address {
+input[type='text'], #address, #password {
   flex: 1; min-width: 0; font: inherit; color: var(--ink);
   background: var(--surface); border: 1.5px solid var(--ink-3); border-radius: 4px; padding: 11px 12px;
 }
@@ -121,6 +125,7 @@ button[disabled] { opacity: .6; cursor: progress; }
 .swatch-hl { background: var(--hl); }
 .swatch-arcus { background: var(--arcus); }
 .swatch-risex { background: var(--risex); }
+.swatch-qfex { background: var(--qfex); }
 .swatch-ink { background: var(--ink); }
 
 .panel-note { color: var(--ink-2); font-size: .875rem; margin: 0 0 10px; max-width: 70ch; }

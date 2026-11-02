@@ -1,4 +1,6 @@
 // RISEx does not allow browser calls from other sites, so its wallet data is read here.
+import { requireSession } from './_auth.js';
+
 const BASE = 'https://api.rise.trade/api';
 const TTL_MS = 60 * 1000;
 const FILL_PAGES = 5;
@@ -70,6 +72,7 @@ export async function lookupRisex(address, fetchImpl = fetch) {
 }
 
 export default async function handler(req, res) {
+  if (!requireSession(req, res)) return;
   const url = new URL(req.url, 'http://local');
   const address = (url.searchParams.get('address') ?? '').toLowerCase();
   res.setHeader('Content-Type', 'application/json');
@@ -80,7 +83,7 @@ export default async function handler(req, res) {
   }
   try {
     const data = await lookupRisex(address);
-    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+    res.setHeader('Cache-Control', 'private, max-age=60');
     res.end(JSON.stringify(data));
   } catch {
     res.statusCode = 502;

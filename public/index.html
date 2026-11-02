@@ -11,10 +11,22 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main>
+  <section id="gate" class="gate" hidden>
+    <p class="brand">Perp Ledger</p>
+    <h1>Private dashboard</h1>
+    <form id="login" novalidate>
+      <label for="password">Password</label>
+      <div class="lookup-row">
+        <input id="password" type="password" autocomplete="current-password" aria-describedby="login-error">
+        <button type="submit">Sign in</button>
+      </div>
+      <p id="login-error" class="field-error" role="alert"></p>
+    </form>
+  </section>
+  <main id="app" hidden>
     <header class="masthead">
       <p class="brand">Perp Ledger</p>
-      <h1>See how a wallet trades across perp DEXs.</h1>
+      <h1>Your perp trading, all in one place.</h1>
       <form id="lookup" class="lookup" novalidate>
         <label for="address">Wallet address</label>
         <div class="lookup-row">
@@ -58,7 +70,7 @@
     </div>
 
     <footer>
-      <p>Figures come straight from each DEX. Your browser asks Hyperliquid and Arcus directly. RISEx lookups and QFEX usernames pass through this site's server. Variational CSVs and your points stay in your browser. Not financial advice.</p>
+      <p>Figures come straight from each DEX. Your browser asks Hyperliquid and Arcus directly. RISEx, QFEX and Ondo data comes through this site's server. Variational CSVs and your points stay in your browser. Not financial advice.</p>
     </footer>
   </main>
   <script type="module" src="app.js"></script>

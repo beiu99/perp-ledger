@@ -7,6 +7,10 @@ import { fileKind, parseCsv, summarizeExports } from '../public/lib/variational.
 import { clearCache, lookup } from '../api/qfex.js';
 import { clearRisexCache, lookupRisex } from '../api/risex.js';
 import { fromRaw, normalizeFill as riseFill, normalizePosition as risePosition } from '../public/lib/risex.js';
+import { createHmac } from 'node:crypto';
+import { isSignedIn, passwordMatches, sessionCookie } from '../api/_auth.js';
+import { isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders } from '../api/private.js';
+import { fromOndo, fromQfex, ondoFill, qfexFill } from '../public/lib/private.js';
 import { PROGRAMS, pointsRow, seasonStats } from '../public/lib/points.js';
 
 test('Hyperliquid PnL has fees removed and only closes count as trades', () => {
@@ -167,11 +171,112 @@ test('Variational PnL has fees taken out before the cost per point', () => {
   assert.equal(r.costPerPoint, -2);
 });
 
-test('Ondo uses PnL when entered and falls back to fees only', () => {
+test('Ondo uses PnL when typed in and falls back to fees only', () => {
   const withPnl = pointsRow(program('ondo'), { status: 'unsupported' }, { points: 200, fees: 50, pnl: -100 });
   assert.equal(withPnl.costPerPoint, 0.5);
   assert.equal(withPnl.feesOnly, false);
   const feesOnly = pointsRow(program('ondo'), { status: 'unsupported' }, { points: 200, fees: 50 });
   assert.equal(feesOnly.costPerPoint, 0.25);
   assert.equal(feesOnly.feesOnly, true);
+});
+
+const hmac = (secret, text) => createHmac('sha256', secret).update(text).digest('hex');
+
+test('the password check and session cookie work together', () => {
+  assert.equal(passwordMatches('secret', 'secret'), true);
+  assert.equal(passwordMatches('wrong', 'secret'), false);
+  assert.equal(passwordMatches('anything', undefined), false);
+  const cookie = sessionCookie('secret', 1000).split(';')[0];
+  assert.equal(isSignedIn({ headers: { cookie } }, 'secret', 2000), true);
+  assert.equal(isSignedIn({ headers: { cookie } }, 'other', 2000), false);
+  assert.equal(isSignedIn({ headers: { cookie } }, 'secret', 1000 + 31 * 86_400_000), false);
+  assert.equal(isSignedIn({ headers: {} }, 'secret', 2000), false);
+  assert.equal(isSignedIn({ headers: { cookie } }, undefined, 2000), false);
+});
+
+test('private data only opens for your own wallets', () => {
+  assert.equal(isMyWallet('0xABC', '0xabc, 0xdef'), true);
+  assert.equal(isMyWallet('0x123', '0xabc'), false);
+  assert.equal(isMyWallet('0x123', ''), false);
+});
+
+test('Ondo requests are signed as its docs describe', () => {
+  const h = ondoHeaders('/v1/perps/fills?limit=1000', 'ondoKeyId_a', 'ondoApiSecret_b', 1700000000000);
+  assert.equal(h['ONDO-KEY-ID'], 'ondoKeyId_a');
+  assert.equal(h['ONDO-TIMESTAMP'], '1700000000000');
+  assert.equal(h['ONDO-SIGN'], hmac('ondoApiSecret_b', '1700000000000GET/v1/perps/fills?limit=1000'));
+});
+
+test('QFEX requests are signed as its docs describe', () => {
+  const h = qfexHeaders('pub', 'sec', 1700000000999, 'abcd');
+  assert.equal(h['x-qfex-timestamp'], '1700000000');
+  assert.equal(h['x-qfex-nonce'], 'abcd');
+  assert.equal(h['x-qfex-hmac-signature'], hmac('sec', 'abcd:1700000000'));
+});
+
+test('Ondo fills follow the cursor and PnL uses the account total', async () => {
+  const pages = [];
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/v1/perps/balance')) return respond(200, { result: { marginBalance: '1500', unrealizedPnl: '-5', totalPnL: '477', totalTradingFees: '123' } });
+    if (u.endsWith('/v1/perps/positions')) return respond(200, { result: [{ direction: 'neutral' }, { market: 'AAPL-USD.P', direction: 'short', netQuantity: '2', averageEntryPrice: '200', notionalValue: '400', unrealizedPnl: '-5', leverage: '5', liquidationPrice: '300' }] });
+    pages.push(u);
+    return pages.length === 1
+      ? respond(200, { result: [{ orderId: 'a', market: 'AAPL-USD.P', time: '2026-11-01T00:00:00Z', filledCost: '100', fee: '1', pnl: '10', direction: 'closeLong', isMaker: true }], pageInfo: { nextCursor: 'NEXT' } })
+      : respond(200, { result: [{ orderId: 'b', market: 'AAPL-USD.P', time: '2026-11-01T01:00:00Z', filledCost: '50', fee: '1', direction: 'openLong', isMaker: false }], pageInfo: {} });
+  };
+  const raw = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, fetchImpl);
+  assert.equal(pages.length, 2);
+  assert.ok(pages[1].includes('cursor=NEXT'));
+  const v = fromOndo(raw, { now: Date.parse('2026-11-02T00:00:00Z') });
+  assert.equal(v.accountValue, 1500);
+  assert.equal(v.pnl.all, 477);
+  assert.equal(v.pnl.d30, 8);
+  assert.equal(v.fees.value, 123);
+  assert.equal(v.volume.all, 150);
+  assert.equal(v.positions.length, 1);
+  assert.equal(v.positions[0].market, 'AAPL');
+  assert.equal(v.trades.closedTrades, 1);
+});
+
+test('Ondo fee rebates reduce the fee', () => {
+  const f = ondoFill({ fee: '1', feeRebate: '0.25', pnl: '0', filledCost: '10', time: '2026-11-01T00:00:00Z' });
+  assert.equal(f.fee, 0.75);
+});
+
+test('QFEX reads positions, PnL, volume and fees, and leaves maker share unknown', async () => {
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.includes('/user/positions')) return respond(200, { balance: { unrealised_pnl: 5 }, positions: [{ symbol: 'AAPL-USD', position: -2, average_price: 200, unrealised_pnl: 5, leverage: 5 }, { symbol: 'X', position: 0 }] });
+    if (u.includes('account-equity')) return respond(200, { data: [{ window_start: '2026-11-01T00:00:00Z', value: 1000 }] });
+    if (u.includes('historic-pnl')) return respond(200, { data: [{ window_start: '2026-11-01T00:00:00Z', value: 40 }] });
+    if (u.includes('/user/volume')) return respond(200, { total_volume: 900 });
+    return respond(200, { data: [{ id: '1', order_timestamp: 1793000000, symbol: 'AAPL-USD', price: 10, quantity: 2, fee: 1, order_id: 'a', realised_pnl_change: 0, liquidation: '' }, { id: '2', order_timestamp: 1793000100, symbol: 'AAPL-USD', price: 12, quantity: 2, fee: 1, order_id: 'b', realised_pnl_change: 4, liquidation: '' }] });
+  };
+  const v = fromQfex(await loadQfex({ QFEX_PUBLIC_KEY: 'p', QFEX_SECRET_KEY: 's' }, fetchImpl));
+  assert.equal(v.accountValue, 1000);
+  assert.equal(v.pnl.d30, 40);
+  assert.equal(v.volume.all, 900);
+  assert.equal(v.fees.value, 2);
+  assert.equal(v.positions.length, 1);
+  assert.equal(v.trades.closedTrades, 1);
+  assert.equal(v.trades.makerShare, null);
+  assert.equal(v.trades.from, 1793000000000);
+});
+
+test('a rejected QFEX key is reported, not hidden as missing data', async () => {
+  await assert.rejects(loadQfex({ QFEX_PUBLIC_KEY: 'p', QFEX_SECRET_KEY: 's' }, async () => respond(401, {})), /401/);
+});
+
+test('QFEX timestamps work in seconds, milliseconds or nanoseconds', () => {
+  const at = (order_timestamp) => qfexFill({ order_timestamp, price: 1, quantity: 1, fee: 0, realised_pnl_change: 0 }).time;
+  assert.equal(at(1793000000), 1793000000000);
+  assert.equal(at(1793000000000), 1793000000000);
+  assert.equal(at(1793000000000000000), 1793000000000);
+});
+
+test('Ondo points use the private account figures when available', () => {
+  const r = pointsRow(program('ondo'), { fees: { value: 100 }, volume: { all: 900 }, pnl: { all: -50 } }, { points: 100 });
+  assert.equal(r.fees, 100);
+  assert.equal(r.costPerPoint, 0.5);
 });

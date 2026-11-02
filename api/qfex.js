@@ -1,4 +1,6 @@
 // QFEX blocks browser calls from other sites, so this one lookup runs on the server.
+import { requireSession } from './_auth.js';
+
 const DURATIONS = ['1w', '1m', 'all'];
 const TTL_MS = 5 * 60 * 1000;
 const cache = new Map();
@@ -41,6 +43,7 @@ export async function lookup(username, fetchImpl = fetch) {
 }
 
 export default async function handler(req, res) {
+  if (!requireSession(req, res)) return;
   const url = new URL(req.url, 'http://local');
   const username = url.searchParams.get('username') ?? '';
   res.setHeader('Content-Type', 'application/json');
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
   }
   try {
     const result = await lookup(username);
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Cache-Control', 'private, max-age=300');
     res.end(JSON.stringify(result));
   } catch {
     res.statusCode = 502;

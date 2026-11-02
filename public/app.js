@@ -4,6 +4,7 @@ import { loadArcus } from './lib/arcus.js';
 import { loadQfex } from './lib/qfex.js';
 import { loadRisex } from './lib/risex.js';
 import { PROGRAMS, pointsRow } from './lib/points.js';
+import { loadPrivate } from './lib/private.js';
 import { fileKind, parseCsv, summarizeExports } from './lib/variational.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,7 +35,7 @@ const state = {
   range: 'd30',
 };
 
-const LINE_KEYS = { hyperliquid: 'hl', arcus: 'arcus', risex: 'risex' };
+const LINE_KEYS = { hyperliquid: 'hl', arcus: 'arcus', risex: 'risex', qfex: 'qfex' };
 
 function readSaved(address) {
   try {
@@ -95,8 +96,12 @@ const isUnknown = (v) => ['blocked', 'unsupported', 'error', 'input', 'idle'].in
 function venueBody(id, v) {
   const line = (title, text) => `<p class="state">${esc(title)}</p>${text ? `<p>${esc(text)}</p>` : ''}`;
   if (id === 'ondo') {
+    if (v.status === 'loading') return line('Reading…');
+    if (isCovered(v)) return line('Your account', 'Read with your private API key.');
+    if (v.status === 'error') return line('Could not read', v.message);
     return line('Not available', 'Ondo keeps account data behind a wallet sign-in, so an address alone cannot show it.');
   }
+  if (id === 'qfex' && v.private) return line('Your account', 'Read with your private API key.');
   if (id === 'qfex') {
     const form = `<form id="qfex-form" aria-label="Find a QFEX trader">
       <input type="text" name="username" aria-label="QFEX username" placeholder="Username" autocomplete="off" maxlength="40">
@@ -334,15 +339,16 @@ const perPoint = (value) => {
 function renderPoints() {
   const saved = state.saved;
   const rows = PROGRAMS.map((p) => pointsRow(p, state.venues[p.id], saved[p.id] ?? {}));
+  const manualOndo = !isCovered(state.venues.ondo);
   const number = (key, id, value, label) =>
     `<input class="points-input" type="number" ${key === 'pnl' ? '' : 'min="0"'} step="any" inputmode="decimal" data-key="${key}" data-program="${id}" aria-label="${esc(label)}" value="${value ?? ''}" placeholder="Enter">`;
   $('points').innerHTML = `<table>
     <thead><tr><th>DEX</th><th>Fees spent</th><th>Volume</th><th>PnL after fees</th><th>Points</th><th>Cost per point</th></tr></thead>
     <tbody>${rows.map((r) => `<tr>
       <td>${r.name}<span class="sub"><a href="${r.url}" target="_blank" rel="noopener">${r.scope}</a></span></td>
-      ${r.id === 'ondo' ? `<td>${number('fees', r.id, r.fees, 'Your Ondo fees in dollars')}</td>` : cell(r.fees)}
+      ${manualOndo ? (r.id === 'ondo' ? `<td>${number('fees', r.id, r.fees, 'Your Ondo fees in dollars')}</td>` : cell(r.fees)) : cell(r.fees)}
       ${cell(r.volume)}
-      ${r.id === 'ondo' ? `<td>${number('pnl', r.id, r.pnl, 'Your Ondo PnL after fees in dollars, negative for a loss')}</td>` : pnlCell(r.pnl)}
+      ${manualOndo && r.id === 'ondo' ? `<td>${number('pnl', r.id, r.pnl, 'Your Ondo PnL after fees in dollars, negative for a loss')}</td>` : pnlCell(r.pnl)}
       <td>${number('points', r.id, r.points, r.label)}</td>
       <td class="key-figure ${r.costPerPoint === null ? '' : tone(-r.costPerPoint)}">${perPoint(r.costPerPoint)}${r.feesOnly ? '<span class="sub">Fees only</span>' : ''}</td>
     </tr>`).join('')}</tbody>
@@ -387,6 +393,13 @@ async function load(address) {
   state.venues.arcus = { status: 'loading' };
   state.venues.risex = { status: 'loading' };
   render();
+  const loadOptional = async (dex) => {
+    const result = await loadPrivate(dex, address);
+    if (result) return result;
+    return dex === 'ondo' ? { status: 'unsupported' } : { status: 'input' };
+  };
+  state.venues.ondo = { status: 'loading' };
+  state.venues.qfex = { status: 'input' };
   const run = async (id, loader) => {
     try {
       state.venues[id] = await loader(address);
@@ -395,7 +408,7 @@ async function load(address) {
     }
     render();
   };
-  await Promise.all([run('hyperliquid', loadHyperliquid), run('arcus', loadArcus), run('risex', loadRisex)]);
+  await Promise.all([run('hyperliquid', loadHyperliquid), run('arcus', loadArcus), run('risex', loadRisex), run('ondo', () => loadOptional('ondo')), run('qfex', () => loadOptional('qfex'))]);
   button.disabled = false;
 }
 
@@ -468,9 +481,42 @@ window.addEventListener('resize', () => {
   }, 150);
 });
 
-render();
-const initial = new URLSearchParams(window.location.search).get('address');
-if (initial) {
-  $('address').value = initial;
-  $('lookup').requestSubmit();
+function openApp() {
+  $('gate').hidden = true;
+  $('app').hidden = false;
+  render();
+  const initial = new URLSearchParams(window.location.search).get('address');
+  if (initial) {
+    $('address').value = initial;
+    $('lookup').requestSubmit();
+  }
 }
+
+$('login').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: $('password').value }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.ok) {
+    $('password').value = '';
+    openApp();
+  } else {
+    $('login-error').textContent = body.error ?? 'Could not sign in. Try again.';
+  }
+});
+
+async function start() {
+  const res = await fetch('/api/login').catch(() => null);
+  const body = res ? await res.json().catch(() => ({})) : {};
+  if (body.signedIn) {
+    openApp();
+    return;
+  }
+  $('gate').hidden = false;
+  if (body.error) $('login-error').textContent = body.error;
+}
+
+start();
