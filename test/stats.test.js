@@ -361,3 +361,13 @@ test('the QFEX check shows each way of reading the PnL points', () => {
   assert.equal(all.count, 0);
   assert.equal(all.latest, null);
 });
+
+test('QFEX PnL adds up its daily changes', () => {
+  const day = (d, value) => ({ window_start: `2026-11-0${d}T00:00:00Z`, value });
+  const v = fromQfex({
+    trades: [],
+    pnl: { d7: { data: [day(1, 500), day(2, -100), day(3, 190.08)] } },
+  });
+  assert.ok(Math.abs(v.pnl.d7 - 590.08) < 1e-9);
+  assert.equal(v.series.d7[1][1], 400);
+});

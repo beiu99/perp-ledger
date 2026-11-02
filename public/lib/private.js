@@ -113,6 +113,15 @@ export function qfexPosition(p) {
 
 const series = (body) => (body?.data ?? []).map((p) => [Date.parse(p.window_start), num(p.value)]);
 
+// QFEX sends PnL as one change per period, like the daily bars in its app, so the total is a running sum.
+export function runningTotal(points) {
+  let total = 0;
+  return points.map(([time, value]) => {
+    total += value;
+    return [time, total];
+  });
+}
+
 // Temporary: QFEX's docs don't say how its PnL points add up, so this shows each reading.
 export function qfexPnlCheck(raw) {
   const row = (label, body) => {
@@ -133,7 +142,11 @@ export function fromQfex(raw) {
   const fills = raw.trades.map(qfexFill);
   const positions = (raw.positions?.positions ?? []).filter((p) => num(p.position) !== 0).map(qfexPosition);
   const balance = raw.positions?.balance ?? {};
-  const pnlSeries = { d7: series(raw.pnl?.d7), d30: series(raw.pnl?.d30), all: series(raw.pnl?.all) };
+  const pnlSeries = {
+    d7: runningTotal(series(raw.pnl?.d7)),
+    d30: runningTotal(series(raw.pnl?.d30)),
+    all: runningTotal(series(raw.pnl?.all)),
+  };
   const equity = lastValue(series(raw.equity));
   const fees = fills.reduce((sum, f) => sum + f.fee, 0);
   return {
