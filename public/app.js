@@ -98,7 +98,7 @@ function venueBody(id, v) {
   const line = (title, text) => `<p class="state">${esc(title)}</p>${text ? `<p>${esc(text)}</p>` : ''}`;
   if (id === 'ondo') {
     if (v.status === 'loading') return line('Reading…');
-    if (isCovered(v)) return line('Your account', 'Read with your private API key.');
+    if (isCovered(v)) return line('Your account', v.fillsLoading ? 'Adding up your trade history…' : v.message ?? 'Read with your private API key.');
     if (v.status === 'error') return line('Could not read', v.message);
     return line('Not available', 'Ondo keeps account data behind a wallet sign-in, so an address alone cannot show it.');
   }
@@ -340,7 +340,7 @@ const perPoint = (value) => {
 function renderPoints() {
   const saved = state.saved;
   const rows = PROGRAMS.map((p) => pointsRow(p, state.venues[p.id], saved[p.id] ?? {}));
-  const manualOndo = !isCovered(state.venues.ondo);
+  const manualOndo = state.venues.ondo.status === 'unsupported';
   const number = (key, id, value, label) =>
     `<input class="points-input" type="number" ${key === 'pnl' ? '' : 'min="0"'} step="any" inputmode="decimal" data-key="${key}" data-program="${id}" aria-label="${esc(label)}" value="${value ?? ''}" placeholder="Enter">`;
   $('points').innerHTML = `<table>
@@ -395,7 +395,12 @@ async function load(address) {
   state.venues.risex = { status: 'loading' };
   render();
   const loadOptional = async (dex) => {
-    const result = await loadPrivate(dex, address);
+    const result = await loadPrivate(dex, address, {
+      onUpdate: (partial) => {
+        state.venues[dex] = partial;
+        render();
+      },
+    });
     if (result) return result;
     return dex === 'ondo' ? { status: 'unsupported' } : { status: 'input' };
   };

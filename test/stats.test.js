@@ -225,7 +225,8 @@ test('Ondo fills follow the cursor and PnL uses the account total', async () => 
       ? respond(200, { result: [{ orderId: 'a', market: 'AAPL-USD.P', time: '2026-11-01T00:00:00Z', filledCost: '100', fee: '1', pnl: '10', direction: 'closeLong', isMaker: true }], pageInfo: { nextCursor: 'NEXT' } })
       : respond(200, { result: [{ orderId: 'b', market: 'AAPL-USD.P', time: '2026-11-01T01:00:00Z', filledCost: '50', fee: '1', direction: 'openLong', isMaker: false }], pageInfo: {} });
   };
-  const raw = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, fetchImpl);
+  const summary = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, { part: 'summary', fetchImpl });
+  const raw = { ...summary, ...(await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, { fetchImpl })) };
   assert.equal(pages.length, 2);
   assert.ok(pages[1].includes('cursor=NEXT'));
   const v = fromOndo(raw, { now: Date.parse('2026-11-02T00:00:00Z') });
@@ -288,7 +289,7 @@ test('pasted keys ignore stray spaces and line breaks', () => {
 
 test('a rejected request shows the DEX code but never its message', async () => {
   const fetchImpl = async () => respond(401, { error: 'IP addr 1.2.3.4 is not allowed for key ondoKeyId_secret', error_code: 'api_key_not_found' });
-  const error = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, fetchImpl).catch((e) => e);
+  const error = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, { fetchImpl }).catch((e) => e);
   const message = failureMessage('Ondo', error);
   assert.equal(message, 'Ondo rejected the request (status 401, api_key_not_found).');
   assert.equal(failureMessage('QFEX', new Error('timeout')), 'QFEX did not respond. Try again in a minute.');
@@ -300,8 +301,6 @@ const ondoFetch = (pages) => {
     calls,
     fetchImpl: async (url) => {
       const u = String(url);
-      if (u.endsWith('/balance')) return respond(200, { result: {} });
-      if (u.endsWith('/positions')) return respond(200, { result: [] });
       calls.push(u);
       return respond(200, pages(calls.length));
     },
@@ -312,7 +311,7 @@ const keys = { ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' };
 
 test('Ondo volume counts every page, even past the old 10,000 fill limit', async () => {
   const { fetchImpl, calls } = ondoFetch((n) => ({ result: [fill], pageInfo: n < 15 ? { nextCursor: `c${n}` } : {} }));
-  const raw = await loadOndo(keys, fetchImpl);
+  const raw = await loadOndo(keys, { fetchImpl });
   assert.equal(calls.length, 15);
   assert.equal(raw.capped, false);
   assert.equal(fromOndo(raw).volume.all, 150);
@@ -320,9 +319,9 @@ test('Ondo volume counts every page, even past the old 10,000 fill limit', async
 
 test('a leftover Ondo cursor on the last page does not mark the data incomplete', async () => {
   const empty = ondoFetch((n) => (n === 1 ? { result: [fill], pageInfo: { nextCursor: 'a' } } : { result: [], pageInfo: { nextCursor: 'b' } }));
-  assert.equal((await loadOndo(keys, empty.fetchImpl)).capped, false);
+  assert.equal((await loadOndo(keys, { fetchImpl: empty.fetchImpl })).capped, false);
   const repeat = ondoFetch(() => ({ result: [fill], pageInfo: { nextCursor: 'same' } }));
-  const raw = await loadOndo(keys, repeat.fetchImpl);
+  const raw = await loadOndo(keys, { fetchImpl: repeat.fetchImpl });
   assert.equal(raw.capped, false);
   assert.equal(repeat.calls.length, 2);
 });
@@ -330,9 +329,25 @@ test('a leftover Ondo cursor on the last page does not mark the data incomplete'
 test('when time runs out Ondo volume stays visible as a minimum', async () => {
   let clock = 0;
   const { fetchImpl } = ondoFetch((n) => ({ result: [fill], pageInfo: { nextCursor: `c${n}` } }));
-  const raw = await loadOndo(keys, fetchImpl, () => (clock += 20_000));
+  const raw = await loadOndo(keys, { fetchImpl, now: () => (clock += 20_000) });
   assert.equal(raw.capped, true);
   const v = fromOndo(raw);
   assert.ok(v.volume.all > 0);
   assert.equal(v.volumeFloor, true);
+});
+
+test('Ondo fees and PnL fill in from the balance before fills finish', () => {
+  const v = fromOndo({ balance: { marginBalance: '100', totalTradingFees: '12.5', totalPnL: '-40' }, positions: [] });
+  assert.equal(v.fillsLoading, true);
+  assert.equal(v.status, 'live');
+  const r = pointsRow(program('ondo'), v, { points: 100 });
+  assert.equal(r.fees, 12.5);
+  assert.equal(r.pnl, -40);
+  assert.equal(r.costPerPoint, 0.4);
+});
+
+test('missing Ondo balance fields stay unknown instead of showing zero', () => {
+  const v = fromOndo({ balance: {}, positions: [] });
+  assert.equal(v.fees, null);
+  assert.equal(v.pnl.all, null);
 });

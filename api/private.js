@@ -51,7 +51,7 @@ export function failureMessage(name, error) {
   return `${name} rejected the request (${detail}).`;
 }
 
-export async function loadOndo(env, fetchImpl = fetch, now = Date.now) {
+export async function loadOndo(env, { part = 'fills', fetchImpl = fetch, now = Date.now } = {}) {
   const get = async (path) => {
     const res = await fetchImpl(`https://api.ondoperps.xyz${path}`, {
       headers: ondoHeaders(path, setting(env, 'ONDO_KEY_ID'), setting(env, 'ONDO_API_SECRET')),
@@ -60,7 +60,10 @@ export async function loadOndo(env, fetchImpl = fetch, now = Date.now) {
     if (!res.ok) throw await failure(res);
     return res.json();
   };
-  const [balance, positions] = await Promise.all([get('/v1/perps/balance'), get('/v1/perps/positions')]);
+  if (part === 'summary') {
+    const [balance, positions] = await Promise.all([get('/v1/perps/balance'), get('/v1/perps/positions')]);
+    return { balance: balance.result, positions: positions.result ?? [] };
+  }
   const fills = [];
   const seen = new Set();
   const deadline = now() + ONDO_BUDGET_MS;
@@ -80,7 +83,7 @@ export async function loadOndo(env, fetchImpl = fetch, now = Date.now) {
     // Ondo can hand back a cursor on the last page, so an empty page or repeat also ends the list.
     if (!cursor || page.length === 0 || seen.has(cursor)) break;
   }
-  return { balance: balance.result, positions: positions.result ?? [], fills, capped };
+  return { fills, capped };
 }
 
 export async function loadQfex(env, fetchImpl = fetch) {
@@ -120,8 +123,8 @@ export async function loadQfex(env, fetchImpl = fetch) {
 }
 
 const DEXES = {
-  ondo: { name: 'Ondo', load: loadOndo, keys: ['ONDO_KEY_ID', 'ONDO_API_SECRET'] },
-  qfex: { name: 'QFEX', load: loadQfex, keys: ['QFEX_PUBLIC_KEY', 'QFEX_SECRET_KEY'] },
+  ondo: { name: 'Ondo', load: (env, part) => loadOndo(env, { part }), keys: ['ONDO_KEY_ID', 'ONDO_API_SECRET'] },
+  qfex: { name: 'QFEX', load: (env) => loadQfex(env), keys: ['QFEX_PUBLIC_KEY', 'QFEX_SECRET_KEY'] },
 };
 
 export const isMyWallet = (address, list = process.env.MY_WALLETS ?? '') =>
@@ -132,6 +135,7 @@ export default async function handler(req, res) {
   const url = new URL(req.url, 'http://local');
   const dex = DEXES[url.searchParams.get('dex')];
   const address = url.searchParams.get('address') ?? '';
+  const part = url.searchParams.get('part') === 'summary' ? 'summary' : 'fills';
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'private, no-store');
   if (!dex) {
@@ -144,7 +148,7 @@ export default async function handler(req, res) {
     return;
   }
   try {
-    res.end(JSON.stringify({ available: true, data: await dex.load(process.env) }));
+    res.end(JSON.stringify({ available: true, data: await dex.load(process.env, part) }));
   } catch (error) {
     res.statusCode = 502;
     res.end(JSON.stringify({ error: failureMessage(dex.name, error) }));

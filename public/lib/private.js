@@ -40,27 +40,34 @@ function windowed(fills, days, now) {
   };
 }
 
-export function fromOndo(raw, { now = Date.now() } = {}) {
-  const fills = raw.fills.map(ondoFill);
-  const positions = raw.positions.filter((p) => p.direction !== 'neutral').map(ondoPosition);
-  const b = raw.balance ?? {};
+const known = (value) => (value === undefined || value === null || value === '' ? null : num(value));
+
+// The balance arrives first, so fees and lifetime PnL show while the fills are still loading.
+export function fromOndo({ balance, positions = [], fills: rawFills = null, capped = false }, { now = Date.now() } = {}) {
+  const fills = rawFills?.map(ondoFill) ?? null;
+  const b = balance ?? {};
+  const fees = known(b.totalTradingFees);
   return {
     status: 'live',
     message: null,
     private: true,
-    accountValue: num(b.marginBalance),
-    unrealizedPnl: num(b.unrealizedPnl),
+    fillsLoading: fills === null,
+    accountValue: known(b.marginBalance),
+    unrealizedPnl: known(b.unrealizedPnl),
     // totalPnL already includes open positions, fees and funding.
-    pnl: { d7: windowed(fills, 7, now).pnl, d30: windowed(fills, 30, now).pnl, all: num(b.totalPnL) },
-    volume: {
-      d30: windowed(fills, 30, now).volume,
-      all: fills.reduce((sum, f) => sum + f.notional, 0),
+    pnl: {
+      d7: fills ? windowed(fills, 7, now).pnl : null,
+      d30: fills ? windowed(fills, 30, now).pnl : null,
+      all: known(b.totalPnL),
     },
-    volumeFloor: raw.capped,
-    fees: { value: num(b.totalTradingFees), scope: 'lifetime' },
+    volume: fills
+      ? { d30: windowed(fills, 30, now).volume, all: fills.reduce((sum, f) => sum + f.notional, 0) }
+      : null,
+    volumeFloor: capped,
+    fees: fees === null ? null : { value: fees, scope: 'lifetime' },
     funding30d: null,
-    positions,
-    trades: summarizeFills(fills, { capped: raw.capped }),
+    positions: positions.filter((p) => p.direction !== 'neutral').map(ondoPosition),
+    trades: fills ? summarizeFills(fills, { capped }) : null,
     series: null,
   };
 }
@@ -129,10 +136,25 @@ export function fromQfex(raw) {
   };
 }
 
-export async function loadPrivate(dex, address, { fetchImpl = fetch } = {}) {
-  const res = await fetchImpl(`/api/private?dex=${dex}&address=${address}`);
+async function request(params, fetchImpl) {
+  const res = await fetchImpl(`/api/private?${params}`);
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `${dex} could not be read.`);
-  if (!body.available) return null;
-  return dex === 'ondo' ? fromOndo(body.data) : fromQfex(body.data);
+  if (!res.ok) throw new Error(body.error ?? 'This DEX could not be read.');
+  return body;
+}
+
+export async function loadPrivate(dex, address, { fetchImpl = fetch, onUpdate = () => {} } = {}) {
+  if (dex === 'qfex') {
+    const body = await request(`dex=qfex&address=${address}`, fetchImpl);
+    return body.available ? fromQfex(body.data) : null;
+  }
+  const summary = await request(`dex=ondo&part=summary&address=${address}`, fetchImpl);
+  if (!summary.available) return null;
+  onUpdate(fromOndo(summary.data));
+  try {
+    const fills = await request(`dex=ondo&address=${address}`, fetchImpl);
+    return fromOndo({ ...summary.data, ...fills.data });
+  } catch (error) {
+    return { ...fromOndo(summary.data), fillsLoading: false, status: 'partial', message: `Trade history could not be read. ${error.message}` };
+  }
 }
