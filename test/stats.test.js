@@ -9,7 +9,7 @@ import { clearRisexCache, lookupRisex } from '../api/risex.js';
 import { fromRaw, normalizeFill as riseFill, normalizePosition as risePosition } from '../public/lib/risex.js';
 import { createHmac } from 'node:crypto';
 import { isSignedIn, passwordMatches, sessionCookie } from '../api/_auth.js';
-import { isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders } from '../api/private.js';
+import { failureMessage, isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders, setting } from '../api/private.js';
 import { fromOndo, fromQfex, ondoFill, qfexFill } from '../public/lib/private.js';
 import { PROGRAMS, pointsRow, seasonStats } from '../public/lib/points.js';
 
@@ -279,4 +279,17 @@ test('Ondo points use the private account figures when available', () => {
   const r = pointsRow(program('ondo'), { fees: { value: 100 }, volume: { all: 900 }, pnl: { all: -50 } }, { points: 100 });
   assert.equal(r.fees, 100);
   assert.equal(r.costPerPoint, 0.5);
+});
+
+test('pasted keys ignore stray spaces and line breaks', () => {
+  assert.equal(setting({ KEY: '  abc\n' }, 'KEY'), 'abc');
+  assert.equal(setting({}, 'KEY'), '');
+});
+
+test('a rejected request shows the DEX code but never its message', async () => {
+  const fetchImpl = async () => respond(401, { error: 'IP addr 1.2.3.4 is not allowed for key ondoKeyId_secret', error_code: 'api_key_not_found' });
+  const error = await loadOndo({ ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' }, fetchImpl).catch((e) => e);
+  const message = failureMessage('Ondo', error);
+  assert.equal(message, 'Ondo rejected the request (status 401, api_key_not_found).');
+  assert.equal(failureMessage('QFEX', new Error('timeout')), 'QFEX did not respond. Try again in a minute.');
 });

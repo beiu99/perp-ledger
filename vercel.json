@@ -2,6 +2,9 @@
   "framework": null,
   "buildCommand": "echo No build needed",
   "outputDirectory": "public",
+  "regions": [
+    "fra1"
+  ],
   "headers": [
     {
       "source": "/(.*)",

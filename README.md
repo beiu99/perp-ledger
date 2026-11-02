@@ -28,6 +28,8 @@ Use keys that can only view data. QFEX needs View orders, View positions and Vie
 
 Changing the password signs out every device. The page's code is public, but all RISEx, QFEX and Ondo data needs the password.
 
+Server functions run in Frankfurt (`fra1`), because Ondo Perps isn't offered in the US.
+
 ## What each DEX provides
 
 | DEX | Input | Source | Coverage |

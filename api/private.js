@@ -27,19 +27,35 @@ export function qfexHeaders(publicKey, secret, now = Date.now(), nonce = randomB
 }
 
 class DexError extends Error {
-  constructor(status) {
+  constructor(status, code) {
     super(`DEX answered ${status}`);
     this.status = status;
+    this.code = code;
   }
+}
+
+async function failure(res) {
+  const body = await res.json().catch(() => ({}));
+  // Only the short code is passed on, because full error messages can quote the key ID.
+  const code = typeof body.error_code === 'string' && /^[a-z0-9_]{1,60}$/i.test(body.error_code) ? body.error_code : null;
+  return new DexError(res.status, code);
+}
+
+export const setting = (env, name) => (env[name] ?? '').trim();
+
+export function failureMessage(name, error) {
+  if (error.status === undefined) return `${name} did not respond. Try again in a minute.`;
+  const detail = [`status ${error.status}`, error.code].filter(Boolean).join(', ');
+  return `${name} rejected the request (${detail}).`;
 }
 
 export async function loadOndo(env, fetchImpl = fetch) {
   const get = async (path) => {
     const res = await fetchImpl(`https://api.ondoperps.xyz${path}`, {
-      headers: ondoHeaders(path, env.ONDO_KEY_ID, env.ONDO_API_SECRET),
+      headers: ondoHeaders(path, setting(env, 'ONDO_KEY_ID'), setting(env, 'ONDO_API_SECRET')),
       signal: timeout(),
     });
-    if (!res.ok) throw new DexError(res.status);
+    if (!res.ok) throw await failure(res);
     return res.json();
   };
   const [balance, positions] = await Promise.all([get('/v1/perps/balance'), get('/v1/perps/positions')]);
@@ -62,10 +78,10 @@ export async function loadOndo(env, fetchImpl = fetch) {
 export async function loadQfex(env, fetchImpl = fetch) {
   const get = async (path) => {
     const res = await fetchImpl(`https://api.qfex.com${path}`, {
-      headers: qfexHeaders(env.QFEX_PUBLIC_KEY, env.QFEX_SECRET_KEY),
+      headers: qfexHeaders(setting(env, 'QFEX_PUBLIC_KEY'), setting(env, 'QFEX_SECRET_KEY')),
       signal: timeout(),
     });
-    if (!res.ok) throw new DexError(res.status);
+    if (!res.ok) throw await failure(res);
     return res.json();
   };
   const optional = (path) => get(path).catch((error) => {
@@ -96,8 +112,8 @@ export async function loadQfex(env, fetchImpl = fetch) {
 }
 
 const DEXES = {
-  ondo: { load: loadOndo, keys: ['ONDO_KEY_ID', 'ONDO_API_SECRET'] },
-  qfex: { load: loadQfex, keys: ['QFEX_PUBLIC_KEY', 'QFEX_SECRET_KEY'] },
+  ondo: { name: 'Ondo', load: loadOndo, keys: ['ONDO_KEY_ID', 'ONDO_API_SECRET'] },
+  qfex: { name: 'QFEX', load: loadQfex, keys: ['QFEX_PUBLIC_KEY', 'QFEX_SECRET_KEY'] },
 };
 
 export const isMyWallet = (address, list = process.env.MY_WALLETS ?? '') =>
@@ -122,10 +138,7 @@ export default async function handler(req, res) {
   try {
     res.end(JSON.stringify({ available: true, data: await dex.load(process.env) }));
   } catch (error) {
-    const rejected = error.status === 401 || error.status === 403;
     res.statusCode = 502;
-    res.end(JSON.stringify({
-      error: rejected ? 'The DEX rejected this API key. Check its value and permissions in Vercel.' : 'The DEX did not respond. Try again in a minute.',
-    }));
+    res.end(JSON.stringify({ error: failureMessage(dex.name, error) }));
   }
 }
