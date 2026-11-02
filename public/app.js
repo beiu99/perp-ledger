@@ -205,8 +205,20 @@ function renderTrades(rows) {
       </dl>
       ${marketTable(t.markets)}</div>`;
   });
+  const qfex = rows.find(({ id }) => id === 'qfex')?.v;
+  if (qfex?.pnlCheck) blocks.push(pnlCheckTable(qfex));
   $('trades-panel').hidden = blocks.length === 0;
   $('trades').innerHTML = blocks.join('');
+}
+
+function pnlCheckTable(v) {
+  const row = (r) => `<tr><td>${r.label}</td>${pnlCell(r.latest)}${pnlCell(r.sum)}${pnlCell(r.change)}<td>${r.count}</td></tr>`;
+  return `<div class="check"><h3>QFEX PnL check</h3>
+    <p class="scope">Which column matches the QFEX app? Realised PnL from your balance: ${usd(v.realisedTotal, { signed: true })}.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Period</th><th>A: latest</th><th>B: added up</th><th>C: first to last</th><th>Points</th></tr></thead>
+      <tbody>${v.pnlCheck.map(row).join('')}</tbody>
+    </table></div></div>`;
 }
 
 function marketTable(markets) {

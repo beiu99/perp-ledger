@@ -113,6 +113,22 @@ export function qfexPosition(p) {
 
 const series = (body) => (body?.data ?? []).map((p) => [Date.parse(p.window_start), num(p.value)]);
 
+// Temporary: QFEX's docs don't say how its PnL points add up, so this shows each reading.
+export function qfexPnlCheck(raw) {
+  const row = (label, body) => {
+    const values = series(body).map(([, v]) => v);
+    if (values.length === 0) return { label, latest: null, sum: null, change: null, count: 0 };
+    return {
+      label,
+      latest: values[values.length - 1],
+      sum: values.reduce((a, b) => a + b, 0),
+      change: values[values.length - 1] - values[0],
+      count: values.length,
+    };
+  };
+  return [row('7 days', raw.pnl?.d7), row('30 days', raw.pnl?.d30), row('All time', raw.pnl?.all)];
+}
+
 export function fromQfex(raw) {
   const fills = raw.trades.map(qfexFill);
   const positions = (raw.positions?.positions ?? []).filter((p) => num(p.position) !== 0).map(qfexPosition);
@@ -124,6 +140,8 @@ export function fromQfex(raw) {
     status: 'live',
     message: null,
     private: true,
+    pnlCheck: qfexPnlCheck(raw),
+    realisedTotal: raw.positions?.balance?.realised_pnl ?? null,
     accountValue: equity ?? num(balance.deposit) + num(balance.realised_pnl) + num(balance.unrealised_pnl) + num(balance.net_funding),
     unrealizedPnl: num(balance.unrealised_pnl),
     pnl: { d7: lastValue(pnlSeries.d7), d30: lastValue(pnlSeries.d30), all: lastValue(pnlSeries.all) },
