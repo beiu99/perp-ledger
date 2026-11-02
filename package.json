@@ -5,8 +5,10 @@
   "type": "module",
   "description": "Wallet stats across perpetual DEXs",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node local-server.mjs",
     "test": "node --test test/*.test.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
