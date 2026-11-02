@@ -5,6 +5,11 @@
   "regions": [
     "fra1"
   ],
+  "functions": {
+    "api/private.js": {
+      "maxDuration": 60
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

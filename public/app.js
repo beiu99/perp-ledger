@@ -65,6 +65,7 @@ const usd = (value, { signed = false } = {}) => {
   if (value < 0) return `−${text}`;
   return signed && value > 0 ? `+${text}` : text;
 };
+const atLeast = (value) => `At least ${usd(value)}`;
 const pct = (value) => (value === null || value === undefined ? '—' : `${(value * 100).toFixed(1)}%`);
 const tone = (value) => (value > 0 ? 'gain' : value < 0 ? 'loss' : '');
 const date = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -154,7 +155,7 @@ function renderVenueTable(rows) {
       <td>${name}</td>
       ${cell(v.accountValue)}
       ${pnlCell(v.pnl?.d7)}${pnlCell(v.pnl?.d30)}${pnlCell(v.pnl?.all)}
-      ${cell(v.volume?.d30)}${cell(v.volume?.all)}
+      ${cell(v.volume?.d30)}${cell(v.volume?.all, v.volumeFloor ? atLeast : usd)}
       ${pnlCell(v.funding30d?.value)}
     </tr>`).join('')}</tbody>
   </table>`;
@@ -347,7 +348,7 @@ function renderPoints() {
     <tbody>${rows.map((r) => `<tr>
       <td>${r.name}<span class="sub"><a href="${r.url}" target="_blank" rel="noopener">${r.scope}</a></span></td>
       ${manualOndo ? (r.id === 'ondo' ? `<td>${number('fees', r.id, r.fees, 'Your Ondo fees in dollars')}</td>` : cell(r.fees)) : cell(r.fees)}
-      ${cell(r.volume)}
+      ${cell(r.volume, r.volumeFloor ? atLeast : usd)}
       ${manualOndo && r.id === 'ondo' ? `<td>${number('pnl', r.id, r.pnl, 'Your Ondo PnL after fees in dollars, negative for a loss')}</td>` : pnlCell(r.pnl)}
       <td>${number('points', r.id, r.points, r.label)}</td>
       <td class="key-figure ${r.costPerPoint === null ? '' : tone(-r.costPerPoint)}">${perPoint(r.costPerPoint)}${r.feesOnly ? '<span class="sub">Fees only</span>' : ''}</td>

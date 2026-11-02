@@ -3,6 +3,8 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { requireSession } from './_auth.js';
 
 const MAX_PAGES = 10;
+const ONDO_MAX_PAGES = 200;
+const ONDO_BUDGET_MS = 45_000;
 const timeout = () => AbortSignal.timeout(8000);
 
 export function ondoHeaders(path, keyId, secret, now = Date.now()) {
@@ -49,7 +51,7 @@ export function failureMessage(name, error) {
   return `${name} rejected the request (${detail}).`;
 }
 
-export async function loadOndo(env, fetchImpl = fetch) {
+export async function loadOndo(env, fetchImpl = fetch, now = Date.now) {
   const get = async (path) => {
     const res = await fetchImpl(`https://api.ondoperps.xyz${path}`, {
       headers: ondoHeaders(path, setting(env, 'ONDO_KEY_ID'), setting(env, 'ONDO_API_SECRET')),
@@ -60,17 +62,23 @@ export async function loadOndo(env, fetchImpl = fetch) {
   };
   const [balance, positions] = await Promise.all([get('/v1/perps/balance'), get('/v1/perps/positions')]);
   const fills = [];
+  const seen = new Set();
+  const deadline = now() + ONDO_BUDGET_MS;
   let cursor = null;
-  let capped = true;
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const path = `/v1/perps/fills?limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const body = await get(path);
-    fills.push(...(body.result ?? []));
-    cursor = body.pageInfo?.nextCursor;
-    if (!cursor) {
-      capped = false;
+  let capped = false;
+  for (;;) {
+    if (seen.size >= ONDO_MAX_PAGES || now() > deadline) {
+      capped = true;
       break;
     }
+    const path = `/v1/perps/fills?limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const body = await get(path);
+    const page = body.result ?? [];
+    fills.push(...page);
+    seen.add(cursor);
+    cursor = body.pageInfo?.nextCursor;
+    // Ondo can hand back a cursor on the last page, so an empty page or repeat also ends the list.
+    if (!cursor || page.length === 0 || seen.has(cursor)) break;
   }
   return { balance: balance.result, positions: positions.result ?? [], fills, capped };
 }

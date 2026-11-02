@@ -54,8 +54,9 @@ export function fromOndo(raw, { now = Date.now() } = {}) {
     pnl: { d7: windowed(fills, 7, now).pnl, d30: windowed(fills, 30, now).pnl, all: num(b.totalPnL) },
     volume: {
       d30: windowed(fills, 30, now).volume,
-      all: raw.capped ? null : fills.reduce((sum, f) => sum + f.notional, 0),
+      all: fills.reduce((sum, f) => sum + f.notional, 0),
     },
+    volumeFloor: raw.capped,
     fees: { value: num(b.totalTradingFees), scope: 'lifetime' },
     funding30d: null,
     positions,

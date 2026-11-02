@@ -293,3 +293,46 @@ test('a rejected request shows the DEX code but never its message', async () => 
   assert.equal(message, 'Ondo rejected the request (status 401, api_key_not_found).');
   assert.equal(failureMessage('QFEX', new Error('timeout')), 'QFEX did not respond. Try again in a minute.');
 });
+
+const ondoFetch = (pages) => {
+  const calls = [];
+  return {
+    calls,
+    fetchImpl: async (url) => {
+      const u = String(url);
+      if (u.endsWith('/balance')) return respond(200, { result: {} });
+      if (u.endsWith('/positions')) return respond(200, { result: [] });
+      calls.push(u);
+      return respond(200, pages(calls.length));
+    },
+  };
+};
+const fill = { filledCost: '10', fee: '0', time: '2026-11-01T00:00:00Z' };
+const keys = { ONDO_KEY_ID: 'k', ONDO_API_SECRET: 's' };
+
+test('Ondo volume counts every page, even past the old 10,000 fill limit', async () => {
+  const { fetchImpl, calls } = ondoFetch((n) => ({ result: [fill], pageInfo: n < 15 ? { nextCursor: `c${n}` } : {} }));
+  const raw = await loadOndo(keys, fetchImpl);
+  assert.equal(calls.length, 15);
+  assert.equal(raw.capped, false);
+  assert.equal(fromOndo(raw).volume.all, 150);
+});
+
+test('a leftover Ondo cursor on the last page does not mark the data incomplete', async () => {
+  const empty = ondoFetch((n) => (n === 1 ? { result: [fill], pageInfo: { nextCursor: 'a' } } : { result: [], pageInfo: { nextCursor: 'b' } }));
+  assert.equal((await loadOndo(keys, empty.fetchImpl)).capped, false);
+  const repeat = ondoFetch(() => ({ result: [fill], pageInfo: { nextCursor: 'same' } }));
+  const raw = await loadOndo(keys, repeat.fetchImpl);
+  assert.equal(raw.capped, false);
+  assert.equal(repeat.calls.length, 2);
+});
+
+test('when time runs out Ondo volume stays visible as a minimum', async () => {
+  let clock = 0;
+  const { fetchImpl } = ondoFetch((n) => ({ result: [fill], pageInfo: { nextCursor: `c${n}` } }));
+  const raw = await loadOndo(keys, fetchImpl, () => (clock += 20_000));
+  assert.equal(raw.capped, true);
+  const v = fromOndo(raw);
+  assert.ok(v.volume.all > 0);
+  assert.equal(v.volumeFloor, true);
+});

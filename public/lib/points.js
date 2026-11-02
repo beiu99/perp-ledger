@@ -22,7 +22,7 @@ export function seasonStats(fills, start, capped) {
 function figures(id, venue, manualFees, manualPnl) {
   if (id === 'arcus') return venue.season ?? null;
   if ((id === 'risex' || id === 'ondo') && venue.fees) {
-    return { fees: venue.fees.value, volume: venue.volume?.all ?? null, pnl: venue.pnl?.all ?? null };
+    return { fees: venue.fees.value, volume: venue.volume?.all ?? null, pnl: venue.pnl?.all ?? null, volumeFloor: Boolean(venue.volumeFloor) };
   }
   if (id === 'variational' && (venue.fees || venue.volume)) {
     const fees = venue.fees?.value ?? null;
@@ -48,6 +48,7 @@ export function pointsRow(program, venue, { points = null, fees = null, pnl = nu
     volume: f?.volume ?? null,
     pnl: f?.pnl ?? null,
     incomplete: Boolean(f?.incomplete),
+    volumeFloor: Boolean(f?.volumeFloor),
     points,
     costPerPoint,
     feesOnly: costPerPoint !== null && !knownPnl,

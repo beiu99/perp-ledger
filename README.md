@@ -62,5 +62,5 @@ No DEX publishes a wallet's points, so visitors copy theirs from each points pag
 - PnL is net of fees in the trading record. PnL over time is what each DEX reports.
 - Variational PnL includes funding. Check the sign of its `fee` rows against a real export: fees are shown as an absolute value.
 - Private figures load only for wallets in `MY_WALLETS`, so looking up another wallet can't mix in your accounts.
-- Private accounts read up to 10,000 fills per lookup. Past that, QFEX fees and Ondo all-time volume show Unknown.
+- QFEX reads up to 10,000 fills per lookup, and past that its fees show Unknown. Ondo reads for up to 45 seconds, and if time runs out its all-time volume shows as "At least".
 - QFEX's docs don't say whether `realised_pnl_change` is before fees. The code treats it as before fees.
