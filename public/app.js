@@ -335,20 +335,20 @@ function renderPoints() {
   const saved = state.saved;
   const rows = PROGRAMS.map((p) => pointsRow(p, state.venues[p.id], saved[p.id] ?? {}));
   const number = (key, id, value, label) =>
-    `<input class="points-input" type="number" min="0" step="any" inputmode="decimal" data-key="${key}" data-program="${id}" aria-label="${esc(label)}" value="${value ?? ''}" placeholder="Enter">`;
+    `<input class="points-input" type="number" ${key === 'pnl' ? '' : 'min="0"'} step="any" inputmode="decimal" data-key="${key}" data-program="${id}" aria-label="${esc(label)}" value="${value ?? ''}" placeholder="Enter">`;
   $('points').innerHTML = `<table>
-    <thead><tr><th>DEX</th><th>Fees spent</th><th>Volume</th><th>PnL</th><th>Points</th><th>Cost per point</th><th>After PnL</th></tr></thead>
+    <thead><tr><th>DEX</th><th>Fees spent</th><th>Volume</th><th>PnL after fees</th><th>Points</th><th>Cost per point</th></tr></thead>
     <tbody>${rows.map((r) => `<tr>
       <td>${r.name}<span class="sub"><a href="${r.url}" target="_blank" rel="noopener">${r.scope}</a></span></td>
       ${r.id === 'ondo' ? `<td>${number('fees', r.id, r.fees, 'Your Ondo fees in dollars')}</td>` : cell(r.fees)}
-      ${cell(r.volume)}${pnlCell(r.pnl)}
+      ${cell(r.volume)}
+      ${r.id === 'ondo' ? `<td>${number('pnl', r.id, r.pnl, 'Your Ondo PnL after fees in dollars, negative for a loss')}</td>` : pnlCell(r.pnl)}
       <td>${number('points', r.id, r.points, r.label)}</td>
-      <td class="key-figure">${perPoint(r.costPerPoint)}</td>
-      <td class="${tone(r.costAfterPnl === null ? 0 : -r.costAfterPnl)}">${perPoint(r.costAfterPnl)}</td>
+      <td class="key-figure ${r.costPerPoint === null ? '' : tone(-r.costPerPoint)}">${perPoint(r.costPerPoint)}${r.feesOnly ? '<span class="sub">Fees only</span>' : ''}</td>
     </tr>`).join('')}</tbody>
   </table>`;
   const notes = [
-    'Cost per point is fees divided by points. After PnL is your net loss per point, and a negative figure means you were paid to earn them.',
+    'Cost per point is your loss after fees divided by your points. A negative figure means you earned the points at a profit.',
     "Hyperliquid has no live points program and QFEX's docs don't mention one, so they're left out.",
   ];
   if (rows.some((r) => r.incomplete)) {
@@ -448,7 +448,8 @@ $('points').addEventListener('change', (event) => {
   const { program, key } = event.target.dataset ?? {};
   if (!program) return;
   const value = Number.parseFloat(event.target.value);
-  const entry = { ...state.saved[program], [key]: Number.isFinite(value) && value >= 0 ? value : null };
+  const valid = Number.isFinite(value) && (key === 'pnl' || value >= 0);
+  const entry = { ...state.saved[program], [key]: valid ? value : null };
   state.saved = { ...state.saved, [program]: entry };
   writeSaved(state.address, state.saved);
   renderPoints();

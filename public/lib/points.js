@@ -19,7 +19,7 @@ export function seasonStats(fills, start, capped) {
   };
 }
 
-function figures(id, venue, manualFees) {
+function figures(id, venue, manualFees, manualPnl) {
   if (id === 'arcus') return venue.season ?? null;
   if (id === 'risex' && venue.fees) {
     return { fees: venue.fees.value, volume: venue.volume?.all ?? null, pnl: venue.pnl?.all ?? null };
@@ -29,13 +29,19 @@ function figures(id, venue, manualFees) {
     const pnl = venue.pnl?.all ?? null;
     return { fees, volume: venue.volume?.all ?? null, pnl: pnl === null || fees === null ? null : pnl - fees };
   }
-  if (id === 'ondo' && manualFees !== null) return { fees: manualFees, volume: null, pnl: null };
+  if (id === 'ondo' && (manualFees !== null || manualPnl !== null)) return { fees: manualFees, volume: null, pnl: manualPnl };
   return null;
 }
 
-export function pointsRow(program, venue, { points = null, fees = null } = {}) {
-  const f = figures(program.id, venue, fees);
+// PnL here is after fees, so it already carries the fee cost. Profit makes the cost negative.
+export function pointsRow(program, venue, { points = null, fees = null, pnl = null } = {}) {
+  const f = figures(program.id, venue, fees, pnl);
   const hasPoints = points !== null && points > 0;
+  const knownPnl = f?.pnl !== null && f?.pnl !== undefined;
+  const knownFees = f?.fees !== null && f?.fees !== undefined;
+  let costPerPoint = null;
+  if (hasPoints && knownPnl) costPerPoint = -f.pnl / points;
+  else if (hasPoints && knownFees) costPerPoint = f.fees / points;
   return {
     ...program,
     fees: f?.fees ?? null,
@@ -43,7 +49,7 @@ export function pointsRow(program, venue, { points = null, fees = null } = {}) {
     pnl: f?.pnl ?? null,
     incomplete: Boolean(f?.incomplete),
     points,
-    costPerPoint: hasPoints && f?.fees !== null && f?.fees !== undefined ? f.fees / points : null,
-    costAfterPnl: hasPoints && f?.pnl !== null && f?.pnl !== undefined ? -f.pnl / points : null,
+    costPerPoint,
+    feesOnly: costPerPoint !== null && !knownPnl,
   };
 }

@@ -38,12 +38,11 @@ The points panel lists DEXs with a live program: Arcus, RISEx, Variational and O
 
 No DEX publishes a wallet's points, so visitors copy theirs from each points page. RISEx has a points endpoint, but it needs the wallet owner's sign-in. Entries are saved in the visitor's browser for that wallet.
 
-- **Cost per point:** fees divided by points.
-- **After PnL:** net loss divided by points. A negative figure means the trading was profitable.
-- **Arcus:** counts fills since Season 1 began on 1 October 2026, because its dashboard shows Season 1 points. PnL here is realized only.
+- **Cost per point:** loss after fees divided by points. A negative figure means the points were earned at a profit. If PnL is unknown, it falls back to fees divided by points and says so.
+- **Arcus:** counts fills since Season 1 began on 1 October 2026, because its dashboard shows Season 1 points. PnL here is realized only and leaves out funding.
 - **RISEx:** compares lifetime fees with total points.
 - **Variational:** uses the dates in the CSVs, so export your full history. Older fees missing from the file make the cost per point look lower than it is.
-- **Ondo:** needs fees typed in as well, and has no volume or PnL.
+- **Ondo:** needs fees and PnL typed in as well, and has no volume.
 
 ## Limits to know
 

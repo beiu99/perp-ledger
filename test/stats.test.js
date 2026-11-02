@@ -136,15 +136,19 @@ test('the RISEx lookup stops paging on the last page and drops flat positions', 
   assert.equal(r.markets['1'], 'BTC/USDC');
 });
 
-test('cost per point divides fees by points, and profit shows as negative cost', () => {
-  const r = pointsRow(program('risex'), { fees: { value: 100 }, volume: { all: 1000 }, pnl: { all: 400 } }, { points: 50 });
-  assert.equal(r.costPerPoint, 2);
-  assert.equal(r.costAfterPnl, -8);
+test('a loss after fees is the cost per point', () => {
+  const r = pointsRow(program('risex'), { fees: { value: 100 }, volume: { all: 1000 }, pnl: { all: -400 } }, { points: 50 });
+  assert.equal(r.costPerPoint, 8);
+  assert.equal(r.feesOnly, false);
+});
+
+test('a profit makes the cost per point negative', () => {
+  const r = pointsRow(program('risex'), { fees: { value: 100 }, pnl: { all: 400 } }, { points: 50 });
+  assert.equal(r.costPerPoint, -8);
 });
 
 test('cost per point stays empty until points are entered', () => {
-  const r = pointsRow(program('risex'), { fees: { value: 100 } }, {});
-  assert.equal(r.costPerPoint, null);
+  assert.equal(pointsRow(program('risex'), { fees: { value: 100 } }, {}).costPerPoint, null);
   assert.equal(pointsRow(program('risex'), { fees: { value: 100 } }, { points: 0 }).costPerPoint, null);
 });
 
@@ -157,15 +161,17 @@ test('Arcus points only count fills from Season 1', () => {
   assert.equal(seasonStats([fill(100, 5)], 80, true).incomplete, true);
 });
 
-test('Variational PnL has fees taken out for the after-PnL figure', () => {
+test('Variational PnL has fees taken out before the cost per point', () => {
   const r = pointsRow(program('variational'), { fees: { value: 10 }, volume: { all: 100 }, pnl: { all: 30 } }, { points: 10 });
   assert.equal(r.pnl, 20);
-  assert.equal(r.costPerPoint, 1);
-  assert.equal(r.costAfterPnl, -2);
+  assert.equal(r.costPerPoint, -2);
 });
 
-test('Ondo uses the fees a visitor enters', () => {
-  const r = pointsRow(program('ondo'), { status: 'unsupported' }, { points: 200, fees: 50 });
-  assert.equal(r.costPerPoint, 0.25);
-  assert.equal(r.pnl, null);
+test('Ondo uses PnL when entered and falls back to fees only', () => {
+  const withPnl = pointsRow(program('ondo'), { status: 'unsupported' }, { points: 200, fees: 50, pnl: -100 });
+  assert.equal(withPnl.costPerPoint, 0.5);
+  assert.equal(withPnl.feesOnly, false);
+  const feesOnly = pointsRow(program('ondo'), { status: 'unsupported' }, { points: 200, fees: 50 });
+  assert.equal(feesOnly.costPerPoint, 0.25);
+  assert.equal(feesOnly.feesOnly, true);
 });
