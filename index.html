@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perp Ledger</title>
+  <meta name="description" content="Paste a wallet and see its perp trading stats across Hyperliquid, Arcus, RISEx, QFEX, Variational and Ondo.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2312345A'/%3E%3Cpath d='M7 22h4V14H7zM14 22h4V8h-4zM21 22h4v-6h-4z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <p class="brand">Perp Ledger</p>
+      <h1>See how a wallet trades across perp DEXs.</h1>
+      <form id="lookup" class="lookup" novalidate>
+        <label for="address">Wallet address</label>
+        <div class="lookup-row">
+          <input id="address" name="address" autocomplete="off" spellcheck="false" placeholder="0x…" aria-describedby="address-error">
+          <button type="submit">Look up wallet</button>
+        </div>
+        <p id="address-error" class="field-error" role="alert"></p>
+      </form>
+    </header>
+
+    <section id="coverage" class="coverage" aria-label="What this wallet's report covers"></section>
+
+    <div id="report" hidden>
+      <section id="totals" class="totals" aria-label="Combined totals"></section>
+      <section class="panel" id="chart-panel" hidden>
+        <div class="panel-head">
+          <h2>Perp PnL over time</h2>
+          <div id="ranges" class="ranges" role="group" aria-label="Time range"></div>
+        </div>
+        <div id="chart"></div>
+        <div id="legend" class="legend"></div>
+      </section>
+      <section class="panel" id="venues-panel">
+        <h2>By DEX</h2>
+        <div class="scroll" id="venues"></div>
+      </section>
+      <section class="panel" id="points-panel">
+        <h2>Points farming</h2>
+        <p class="panel-note">DEXs don't publish a wallet's points, so copy yours from each points page. They're saved in this browser only.</p>
+        <div class="scroll" id="points"></div>
+        <p class="panel-note" id="points-note"></p>
+      </section>
+      <section class="panel" id="positions-panel" hidden>
+        <h2>Open positions</h2>
+        <div class="scroll" id="positions"></div>
+      </section>
+      <section class="panel" id="trades-panel" hidden>
+        <h2>Trading record</h2>
+        <div id="trades" class="trades"></div>
+      </section>
+    </div>
+
+    <footer>
+      <p>Figures come straight from each DEX. Your browser asks Hyperliquid and Arcus directly. RISEx lookups and QFEX usernames pass through this site's server. Variational CSVs and your points stay in your browser. Not financial advice.</p>
+    </footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
