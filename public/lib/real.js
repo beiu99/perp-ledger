@@ -1,4 +1,4 @@
-import { DAY_MS, num, summarizeFills } from './stats.js';
+import { averageOi, DAY_MS, num, summarizeFills } from './stats.js';
 
 const BASE = 'https://indexer.api.real.xyz/api/v1';
 const MAX_PAGES = 10;
@@ -32,6 +32,8 @@ export function normalizeFill(f, markets = {}) {
   return {
     time: f.created_at_ms,
     market: shortName(markets[f.market_id]) || 'Unknown',
+    price: num(f.price),
+    size: (f.direction === 'Short' ? -1 : 1) * num(f.volume),
     notional: num(f.filled_value) || num(f.price) * num(f.volume),
     // Real Markets records fees as negative numbers, and realised_pnl already includes them.
     fee: -num(f.realised_pnl_attribution?.trade_fee),
@@ -107,6 +109,7 @@ export function fromRaw({ accounts, positions, fills, funding, markets, capped }
     },
     positions: open,
     trades: summarizeFills(normalizedFills, { capped }),
+    oi: averageOi(normalizedFills, open, { capped, now }),
     series: capped ? null : { d7: pnlSeries(events, now - 7 * DAY_MS), d30: pnlSeries(events, since30), all: pnlSeries(events) },
   };
 }

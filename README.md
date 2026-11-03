@@ -44,6 +44,10 @@ Server functions run in Frankfurt (`fra1`), because Ondo Perps isn't offered in 
 
 A DEX with no data stays out of the totals, and each total says how many DEXs it covers.
 
+## Average open interest
+
+The average value of open positions over 7 days, 30 days and all time, with flat periods counted as zero. Every DEX is rebuilt the same way, by walking back from current positions through the fills, using fill prices. RISEx's own `market_exposure` isn't used, because it isn't comparable: it runs lower for wallets holding several positions and ignores flat time. A `~` means an estimate. QFEX's leaderboard mode has no OI.
+
 ## Points
 
 The points panel lists DEXs with a live program: Arcus, RISEx, Variational and Ondo. Hyperliquid has no live program, and no program was found for QFEX or Real Markets, so all three are left out. Update `PROGRAMS` in `public/lib/points.js` when programs start or end.

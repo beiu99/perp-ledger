@@ -1,4 +1,4 @@
-import { num, DAY_MS } from './stats.js';
+import { averageOi, num, DAY_MS } from './stats.js';
 
 export function parseCsv(text) {
   const rows = [];
@@ -86,6 +86,24 @@ export function summarizeExports(files, { now = Date.now() } = {}) {
     markets.set(r.underlying, m);
   }
 
+  // The CSVs have no current positions, so sizes are built forward from the start of the export.
+  const oiFills = uniqueTrades.map((r) => ({
+    time: time(r),
+    market: r.underlying,
+    price: num(r.price),
+    size: (r.side === 'sell' ? -1 : 1) * Math.abs(num(r.qty)),
+  }));
+  const netSizes = new Map();
+  for (const f of oiFills) netSizes.set(f.market, (netSizes.get(f.market) ?? 0) + f.size);
+  const lastPrice = (market) =>
+    [...oiFills].filter((f) => f.market === market).sort((a, b) => b.time - a.time)[0]?.price ?? 0;
+  const held = [...netSizes].filter(([, size]) => Math.abs(size) > 1e-9).map(([market, size]) => ({
+    market,
+    side: size < 0 ? 'Short' : 'Long',
+    size: Math.abs(size),
+    notional: Math.abs(size) * lastPrice(market),
+  }));
+
   const d7 = now - 7 * DAY_MS;
   const d30 = now - 30 * DAY_MS;
   const fundingValue = total(uniqueTransfers, 'funding', d30);
@@ -102,6 +120,7 @@ export function summarizeExports(files, { now = Date.now() } = {}) {
     funding30d: hasTransfers ? { value: fundingValue, complete: true } : null,
     positions: [],
     trades: null,
+    oi: hasTrades ? averageOi(oiFills, held, { now, assumed: true }) : null,
     tradeMarkets: [...markets.values()].sort((a, b) => b.volume - a.volume),
     series: null,
     exportRange: times.length ? { from: Math.min(...times), to: Math.max(...times) } : null,

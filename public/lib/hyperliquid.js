@@ -1,4 +1,4 @@
-import { num, summarizeFills, lastValue, DAY_MS } from './stats.js';
+import { averageOi, num, summarizeFills, lastValue, DAY_MS } from './stats.js';
 
 const URL_INFO = 'https://api.hyperliquid.xyz/info';
 const FUNDING_PAGE = 500;
@@ -23,6 +23,8 @@ export function normalizeFill(f) {
   return {
     time: f.time,
     market: f.coin,
+    price: num(f.px),
+    size: f.side === 'B' ? num(f.sz) : -num(f.sz),
     notional,
     fee,
     netPnl: num(f.closedPnl) - fee,
@@ -109,6 +111,7 @@ export async function loadHyperliquid(user, { fetchImpl = fetch, now = Date.now(
     funding30d: funding,
     positions,
     trades: summarizeFills(perpFills, { capped: fills.length >= 2000 }),
+    oi: averageOi(perpFills, positions, { capped: fills.length >= 2000, now }),
     series: pnlSeries,
   };
 }

@@ -1,4 +1,4 @@
-import { DAY_MS, lastValue, num, summarizeFills } from './stats.js';
+import { averageOi, DAY_MS, lastValue, num, summarizeFills } from './stats.js';
 
 const trimUsd = (market) => (market ?? '').replace(/-USD\.P$/, '').replace(/-USD$/, '');
 
@@ -8,6 +8,8 @@ export function ondoFill(f) {
   return {
     time: Date.parse(f.time),
     market: trimUsd(f.market),
+    price: num(f.price),
+    size: (f.side === 'sell' ? -1 : 1) * Math.abs(num(f.size)),
     notional: Math.abs(num(f.filledCost)),
     fee,
     netPnl: pnl - fee,
@@ -47,6 +49,7 @@ export function fromOndo({ balance, positions = [], fills: rawFills = null, capp
   const fills = rawFills?.map(ondoFill) ?? null;
   const b = balance ?? {};
   const fees = known(b.totalTradingFees);
+  const open = positions.filter((p) => p.direction !== 'neutral').map(ondoPosition);
   return {
     status: 'live',
     message: null,
@@ -66,8 +69,9 @@ export function fromOndo({ balance, positions = [], fills: rawFills = null, capp
     volumeFloor: capped,
     fees: fees === null ? null : { value: fees, scope: 'lifetime' },
     funding30d: null,
-    positions: positions.filter((p) => p.direction !== 'neutral').map(ondoPosition),
+    positions: open,
     trades: fills ? summarizeFills(fills, { capped }) : null,
+    oi: fills ? averageOi(fills, open, { capped, now }) : null,
     series: null,
   };
 }
@@ -86,6 +90,8 @@ export function qfexFill(t) {
   return {
     time: toMs(t.order_timestamp),
     market: trimUsd(t.symbol),
+    price: num(t.price),
+    size: (/^(s|ask)/i.test(t.side ?? '') ? -1 : 1) * Math.abs(num(t.quantity)),
     notional: Math.abs(num(t.price) * num(t.quantity)),
     fee,
     netPnl: realised - fee,
@@ -145,6 +151,7 @@ export function fromQfex(raw) {
     funding30d: null,
     positions,
     trades: summarizeFills(fills, { capped: raw.capped }),
+    oi: averageOi(fills, positions, { capped: raw.capped }),
     series: pnlSeries,
   };
 }

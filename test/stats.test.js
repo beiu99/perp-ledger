@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { combine, mergeSeries, summarizeFills } from '../public/lib/stats.js';
+import { averageOi, combine, mergeSeries, summarizeFills } from '../public/lib/stats.js';
 import { normalizeFill as hlFill } from '../public/lib/hyperliquid.js';
 import { normalizeFill as arcusFill, loadArcus } from '../public/lib/arcus.js';
 import { fileKind, parseCsv, summarizeExports } from '../public/lib/variational.js';
@@ -459,4 +459,65 @@ test('Real Markets falls back from wallet address to account ID', async () => {
 test('an unknown Real Markets ID reads as no activity', async () => {
   const fetchImpl = async (url) => (String(url).includes('p%5Bs%5D') ? respond(200, { data: [], pagination: {} }) : respond(404, {}));
   assert.equal((await loadReal('0xb', { fetchImpl })).status, 'empty');
+});
+
+const DAY = 86_400_000;
+const NOW = 100 * DAY;
+const oiFill = (day, size, price = 100) => ({ time: NOW - day * DAY, market: 'BTC', size, price });
+
+test('average OI counts time with no position as zero', () => {
+  const oi = averageOi([oiFill(6, 1), oiFill(4, -1)], [], { now: NOW });
+  assert.ok(Math.abs(oi.d7.value - 100 * 2 / 7) < 1e-9);
+  assert.equal(oi.d7.partial, false);
+  assert.ok(Math.abs(oi.d30.value - 100 * 2 / 30) < 1e-9);
+  assert.ok(Math.abs(oi.all.value - 100 * 2 / 6) < 1e-9);
+});
+
+test('average OI carries an open position up to today at its current value', () => {
+  const oi = averageOi([oiFill(2, 2)], [{ market: 'BTC', side: 'Long', size: 2, notional: 300 }], { now: NOW });
+  assert.ok(Math.abs(oi.d7.value - 300 * 2 / 7) < 1e-9);
+});
+
+test('average OI handles shorts and flips', () => {
+  const oi = averageOi([oiFill(4, -1), oiFill(2, 3), oiFill(1, -2)], [], { now: NOW });
+  assert.ok(Math.abs(oi.d7.value - (100 * 2 + 200 * 1) / 7) < 1e-9);
+  assert.equal(oi.d7.partial, false);
+});
+
+test('average OI is marked as an estimate when history is cut off', () => {
+  const oi = averageOi([oiFill(2, 1)], [{ market: 'BTC', side: 'Long', size: 5, notional: 500 }], { capped: true, now: NOW });
+  assert.equal(oi.d7.partial, true);
+  assert.ok(Math.abs(oi.d7.value - 500) < 100);
+});
+
+test('average OI flags fills that do not explain the current position', () => {
+  const oi = averageOi([oiFill(2, 1)], [{ market: 'BTC', side: 'Long', size: 5, notional: 500 }], { now: NOW });
+  assert.equal(oi.d7.partial, true);
+});
+
+test('average OI uses fills as the only period for a position opened before the window', () => {
+  const oi = averageOi([oiFill(20, 1), oiFill(2, -1)], [], { now: NOW });
+  assert.ok(Math.abs(oi.d7.value - 100 * 5 / 7) < 1e-9);
+  assert.ok(Math.abs(oi.d30.value - 100 * 18 / 30) < 1e-9);
+});
+
+test('a wallet with no fills or positions has zero OI, and unknown all time', () => {
+  const oi = averageOi([], [], { now: NOW });
+  assert.equal(oi.d7.value, 0);
+  assert.equal(oi.all.value, null);
+});
+
+test('RISEx OI is rebuilt from its fills like the other DEXs', () => {
+  const now = Date.now();
+  const trades = [{ market_id: '1', side: 'BUY', position_side: 'BUY', price: '100', size: '2', fee: '0', time: String((now - DAY) * 1e6), realized_pnl: '0', realised_pnl: '0', order_id: 'a' }];
+  const v = fromRaw({ summary: { total_account_value: '5' }, totalVolume: '200', trades, markets: { 1: 'BTC/USDC' }, positions: [{ size: '2', market_name: 'BTC/USDC', avg_entry_price: '100', mark_price: '100' }] });
+  assert.ok(Math.abs(v.oi.d7.value - 200 / 7) < 1);
+  assert.equal(v.oi.d7.partial, false);
+});
+
+test('Variational OI is always marked as an estimate', () => {
+  const rows = parseCsv('id,created_at,side,underlying,price,qty,trade_type,status\n1,2026-10-30T00:00:00Z,buy,BTC,100,2,trade,confirmed\n');
+  const s = summarizeExports([{ kind: 'trades', rows }], { now: Date.parse('2026-11-01T00:00:00Z') });
+  assert.equal(s.oi.d7.partial, true);
+  assert.ok(Math.abs(s.oi.d7.value - 200 * 2 / 7) < 1e-9);
 });

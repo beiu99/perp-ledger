@@ -110,3 +110,60 @@ export function combine(venues) {
     },
   };
 }
+
+const FLAT_TOLERANCE = 0.01;
+
+function marketExposure(fills, position, since, now) {
+  const ordered = [...fills].sort((a, b) => b.time - a.time);
+  let size = position ? (position.side === 'Short' ? -position.size : position.size) : 0;
+  let price = position?.size ? position.notional / position.size : ordered[0]?.price ?? 0;
+  let end = now;
+  let area = 0;
+  let largest = Math.abs(size);
+  let reachedStart = false;
+  for (const fill of ordered) {
+    if (!reachedStart && fill.time < since) {
+      area += Math.abs(size) * price * (end - since);
+      reachedStart = true;
+    }
+    if (!reachedStart) {
+      area += Math.abs(size) * price * (end - fill.time);
+      end = fill.time;
+    }
+    size -= fill.size;
+    price = fill.price;
+    largest = Math.max(largest, Math.abs(size));
+  }
+  if (!reachedStart && since !== -Infinity) area += Math.abs(size) * price * Math.max(0, end - since);
+  return { area, leftover: Math.abs(size), largest };
+}
+
+// Average open position value over each period, rebuilt by walking back from today's positions.
+export function averageOi(fills, positions, { capped = false, now = Date.now(), assumed = false } = {}) {
+  const dated = fills.filter((f) => Number.isFinite(f.time) && Number.isFinite(f.size));
+  const first = dated.length ? Math.min(...dated.map((f) => f.time)) : null;
+  const markets = new Set([...dated.map((f) => f.market), ...positions.map((p) => p.market)]);
+  const period = (start) => {
+    const covered = capped && first !== null ? Math.max(start, first) : start;
+    const span = now - covered;
+    if (!(span > 0) || first === null) return positions.length ? null : 0;
+    let area = 0;
+    let unbalanced = false;
+    for (const market of markets) {
+      const list = dated.filter((f) => f.market === market);
+      const exposure = marketExposure(list, positions.find((p) => p.market === market), covered, now);
+      area += exposure.area;
+      if (!capped && exposure.leftover > exposure.largest * FLAT_TOLERANCE) unbalanced = true;
+    }
+    return { value: area / span, partial: assumed || unbalanced || covered > start };
+  };
+  const result = (start) => {
+    const entry = period(start);
+    return typeof entry === 'object' ? entry : { value: entry, partial: false };
+  };
+  return {
+    d7: result(now - 7 * DAY_MS),
+    d30: result(now - 30 * DAY_MS),
+    all: first === null ? { value: null, partial: false } : result(first),
+  };
+}

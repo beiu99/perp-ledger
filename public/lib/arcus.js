@@ -1,4 +1,4 @@
-import { num, summarizeFills, lastValue, DAY_MS } from './stats.js';
+import { averageOi, num, summarizeFills, lastValue, DAY_MS } from './stats.js';
 import { ARCUS_SEASON_START, seasonStats } from './points.js';
 
 const BASE = 'https://api.arcus.xyz';
@@ -32,6 +32,8 @@ export function normalizeFill(f) {
   return {
     time: Math.floor(f.createdAt / 1000),
     market: f.marketDisplayName,
+    price: num(f.price),
+    size: (f.side === 'SELL' ? -1 : 1) * num(f.size),
     notional: num(f.price) * num(f.size),
     fee: num(f.fee),
     // Arcus already takes the fee out of closedPnl, except the penalty on liquidations.
@@ -138,6 +140,7 @@ export async function loadArcus(address, { fetchImpl = fetch, now = Date.now() }
     funding30d: funding,
     positions,
     trades: fills ? summarizeFills(fills, { capped: fillResult.capped }) : null,
+    oi: fills ? averageOi(fills, positions, { capped: fillResult.capped, now }) : null,
     season: fills ? seasonStats(fills, ARCUS_SEASON_START, fillResult.capped) : null,
     series: pnlSeries,
   };

@@ -138,8 +138,8 @@ button[disabled] { opacity: .6; cursor: progress; }
 .swatch-ink { background: var(--ink); }
 
 .panel-note { color: var(--ink-2); font-size: .875rem; margin: 0 0 10px; max-width: 70ch; }
-#points-note { margin: 10px 0 0; }
-#points-note:empty { display: none; }
+#points-note, #oi-note { margin: 10px 0 0; }
+#points-note:empty, #oi-note:empty { display: none; }
 .points-input { width: 118px; text-align: right; font: inherit; color: var(--ink); background: var(--page); border: 1.5px solid var(--ink-3); border-radius: 4px; padding: 5px 8px; }
 .sub { display: block; font-size: .8125rem; color: var(--ink-3); }
 .sub a { color: inherit; }

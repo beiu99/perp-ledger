@@ -1,4 +1,4 @@
-import { num, summarizeFills, lastValue } from './stats.js';
+import { averageOi, num, summarizeFills, lastValue } from './stats.js';
 
 const series = (points) => (points ?? []).map((p) => [Math.floor(num(p.timestamp) / 1e6), num(p.value)]);
 
@@ -6,6 +6,8 @@ export function normalizeFill(t, markets = {}) {
   return {
     time: Math.floor(num(t.time) / 1e6),
     market: (markets[t.market_id] ?? `Market ${t.market_id}`).replace('/USDC', ''),
+    price: num(t.price),
+    size: (t.side === 'SELL' ? -1 : 1) * num(t.size),
     notional: num(t.price) * num(t.size),
     fee: num(t.fee),
     // realized_pnl already has the fee taken out. A fill closes when it trades against its position.
@@ -39,6 +41,7 @@ export function fromRaw(raw) {
   if (accountValue === 0 && volumeAll === 0 && fills.length === 0) {
     return { status: 'empty', message: 'No RISEx activity for this wallet.' };
   }
+  const positions = (raw.positions ?? []).map(normalizePosition);
   const pnlSeries = { d7: series(raw.charts?.d7), d30: series(raw.charts?.d30), all: series(raw.charts?.all) };
   return {
     status: 'live',
@@ -49,8 +52,9 @@ export function fromRaw(raw) {
     volume: { d30: num(raw.volume?.d30), all: volumeAll },
     fees: { value: num(raw.totalFee), scope: 'lifetime' },
     funding30d: null,
-    positions: (raw.positions ?? []).map(normalizePosition),
+    positions,
     trades: summarizeFills(fills, { capped: Boolean(raw.capped) }),
+    oi: averageOi(fills, positions, { capped: Boolean(raw.capped) }),
     series: pnlSeries,
   };
 }

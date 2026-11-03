@@ -177,6 +177,25 @@ function renderVenueTable(rows) {
   </table>`;
 }
 
+function renderOi(rows) {
+  const shown = rows.filter(({ v }) => v.oi);
+  const oiCell = (entry) => {
+    if (entry?.value === null || entry?.value === undefined) return '<td class="unknown-cell">Unknown</td>';
+    return `<td>${entry.partial ? '~' : ''}${usd(entry.value)}</td>`;
+  };
+  $('oi-panel').hidden = shown.length === 0;
+  $('oi').innerHTML = `<table>
+    <thead><tr><th>DEX</th><th>1 week</th><th>1 month</th><th>All time</th></tr></thead>
+    <tbody>${shown.map(({ name, v }) => `<tr>
+      <td>${name}</td>${oiCell(v.oi.d7)}${oiCell(v.oi.d30)}${oiCell(v.oi.all)}
+    </tr>`).join('')}</tbody>
+  </table>`;
+  const partial = shown.some(({ v }) => [v.oi.d7, v.oi.d30, v.oi.all].some((e) => e?.partial));
+  $('oi-note').textContent = partial
+    ? 'A ~ means the figure is an estimate. The history is shorter than the period, or the fills don\'t fully explain your positions.'
+    : '';
+}
+
 function renderPositions(rows) {
   const positions = rows.flatMap(({ name, v }) => (v.positions ?? []).map((p) => ({ ...p, venue: name })));
   positions.sort((a, b) => b.notional - a.notional);
@@ -391,12 +410,13 @@ function render() {
   const hasReport = rows.length > 0;
   for (const id of ['totals', 'venues-panel']) $(id).hidden = !hasReport;
   if (!hasReport) {
-    for (const id of ['chart-panel', 'positions-panel', 'trades-panel']) $(id).hidden = true;
+    for (const id of ['chart-panel', 'oi-panel', 'positions-panel', 'trades-panel']) $(id).hidden = true;
     return;
   }
   renderTotals(combine(list.map(({ v }) => v)));
   renderChart(rows);
   renderVenueTable(rows);
+  renderOi(rows);
   renderPositions(rows);
   renderTrades(rows);
 }
