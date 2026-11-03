@@ -121,7 +121,7 @@ async function findAccounts(ref, fetchImpl) {
   if (res.status === 404 || res.status === 400) return [];
   if (!res.ok) throw new Error(`Real Markets answered ${res.status}.`);
   const body = await res.json();
-  return body.data ? [body.data] : [];
+  return body.data?.id ? [body.data] : [];
 }
 
 export async function loadReal(ref, { fetchImpl = fetch, now = Date.now() } = {}) {
