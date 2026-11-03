@@ -11,7 +11,7 @@ import { createHmac } from 'node:crypto';
 import { isSignedIn, passwordMatches, sessionCookie } from '../api/_auth.js';
 import { failureMessage, isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders, setting } from '../api/private.js';
 import { fromOndo, fromQfex, ondoFill, qfexFill, qfexPnlCheck } from '../public/lib/private.js';
-import { fromRaw as fromReal, isIotaAddress, loadReal, normalizeFill as realFill, normalizePosition as realPosition, pnlSeries } from '../public/lib/real.js';
+import { findAccountRef, fromRaw as fromReal, loadReal, normalizeFill as realFill, normalizePosition as realPosition, pnlSeries } from '../public/lib/real.js';
 import { PROGRAMS, pointsRow, seasonStats } from '../public/lib/points.js';
 
 test('Hyperliquid PnL has fees removed and only closes count as trades', () => {
@@ -447,7 +447,26 @@ test('Real Markets paging follows the cursor and an unknown address reads as no 
   assert.ok(urls.some((u) => u.includes('f[account_ids]=0xa')));
 });
 
-test('IOTA addresses are told apart from EVM ones', () => {
-  assert.equal(isIotaAddress(`0x${'a'.repeat(64)}`), true);
-  assert.equal(isIotaAddress(`0x${'a'.repeat(40)}`), false);
+test('Real Markets accepts an account ID, an address or a profile link', () => {
+  const id = `0x${'A'.repeat(64)}`;
+  assert.equal(findAccountRef(id), id.toLowerCase());
+  assert.equal(findAccountRef(`https://app.real.xyz/en/profile/${id}?tab=x`), id.toLowerCase());
+  assert.equal(findAccountRef(`0x${'a'.repeat(40)}`), null);
+  assert.equal(findAccountRef(null), null);
+});
+
+test('Real Markets falls back from wallet address to account ID', async () => {
+  const fetchImpl = async (url) => {
+    const u = decodeURIComponent(String(url));
+    if (u.includes('f[address]')) return respond(200, { data: [], pagination: {} });
+    if (/\/accounts\/0xa$/.test(u)) return respond(200, { data: realAccount });
+    return respond(200, { data: [], pagination: {} });
+  };
+  const v = await loadReal('0xA', { fetchImpl });
+  assert.equal(v.accountValue, 111.525219);
+});
+
+test('an unknown Real Markets ID reads as no activity', async () => {
+  const fetchImpl = async (url) => (String(url).includes('p%5Bs%5D') ? respond(200, { data: [], pagination: {} }) : respond(404, {}));
+  assert.equal((await loadReal('0xb', { fetchImpl })).status, 'empty');
 });

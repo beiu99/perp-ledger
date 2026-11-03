@@ -111,11 +111,22 @@ export function fromRaw({ accounts, positions, fills, funding, markets, capped }
   };
 }
 
-export const isIotaAddress = (value) => /^0x[0-9a-fA-F]{64}$/.test(value);
+// Accepts an account ID, an IOTA address or a whole profile link from the Real Markets app.
+export const findAccountRef = (value) => (value ?? '').match(/0x[0-9a-fA-F]{64}/)?.[0].toLowerCase() ?? null;
 
-export async function loadReal(address, { fetchImpl = fetch, now = Date.now() } = {}) {
-  const { rows: accounts } = await getAll('/accounts', { 'f[address]': address.toLowerCase() }, fetchImpl);
-  if (accounts.length === 0) return { status: 'empty', message: 'No Real Markets account for this address.' };
+async function findAccounts(ref, fetchImpl) {
+  const { rows } = await getAll('/accounts', { 'f[address]': ref }, fetchImpl);
+  if (rows.length > 0) return rows;
+  const res = await fetchImpl(`${BASE}/accounts/${ref}`);
+  if (res.status === 404 || res.status === 400) return [];
+  if (!res.ok) throw new Error(`Real Markets answered ${res.status}.`);
+  const body = await res.json();
+  return body.data ? [body.data] : [];
+}
+
+export async function loadReal(ref, { fetchImpl = fetch, now = Date.now() } = {}) {
+  const accounts = await findAccounts(ref.toLowerCase(), fetchImpl);
+  if (accounts.length === 0) return { status: 'empty', message: 'No Real Markets account matches this ID.' };
   const ids = accounts.map((a) => a.id).join(',');
   const [historic, live, funding, marketList, ...fillLists] = await Promise.all([
     getAll('/positions/historic', { 'f[account_ids]': ids }, fetchImpl),

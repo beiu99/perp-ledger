@@ -5,7 +5,7 @@ import { loadQfex } from './lib/qfex.js';
 import { loadRisex } from './lib/risex.js';
 import { PROGRAMS, pointsRow } from './lib/points.js';
 import { loadPrivate } from './lib/private.js';
-import { isIotaAddress, loadReal } from './lib/real.js';
+import { findAccountRef, loadReal } from './lib/real.js';
 import { fileKind, parseCsv, summarizeExports } from './lib/variational.js';
 
 const $ = (id) => document.getElementById(id);
@@ -109,14 +109,14 @@ function venueBody(id, v) {
   }
   if (id === 'real') {
     const form = `<form id="real-form" aria-label="Look up a Real Markets account">
-      <input type="text" name="address" aria-label="IOTA wallet address" placeholder="IOTA address (0x…)" autocomplete="off" spellcheck="false" value="${esc(state.realAddress ?? '')}">
+      <input type="text" name="address" aria-label="Real Markets account ID or profile link" placeholder="Account ID or profile link" autocomplete="off" spellcheck="false" value="${esc(state.realAddress ?? '')}">
       <button type="submit">Find</button>
     </form>`;
     if (v.status === 'loading') return line('Reading…') + form;
     if (isCovered(v)) return line('Covered', v.trades?.capped ? `Trading record uses the latest ${v.trades.fillCount.toLocaleString('en-US')} fills.` : null) + form;
     if (v.status === 'empty') return line('No activity', v.message) + form;
     if (v.status === 'error') return line('Could not read', v.message) + form;
-    return line('Needs your IOTA address', 'Real Markets runs on IOTA, so its wallets are longer than EVM addresses.') + form;
+    return line('Needs your account ID', 'In Real Markets, click your wallet, then Profile, and paste that page\'s link here.') + form;
   }
   if (id === 'qfex' && v.private) return line('Your account', 'Read with your private API key.');
   if (id === 'qfex') {
@@ -482,14 +482,15 @@ async function lookUpReal(address) {
 
 function onReal(event) {
   event.preventDefault();
-  const address = new FormData(event.target).get('address').trim();
-  if (!isIotaAddress(address)) {
-    state.realAddress = address;
-    state.venues.real = { status: 'error', message: 'Enter an IOTA address: 0x followed by 64 letters and numbers.' };
+  const entered = new FormData(event.target).get('address').trim();
+  const ref = findAccountRef(entered);
+  if (!ref) {
+    state.realAddress = entered;
+    state.venues.real = { status: 'error', message: 'Paste your profile link, or an account ID: 0x followed by 64 letters and numbers.' };
     render();
     return;
   }
-  lookUpReal(address);
+  lookUpReal(ref);
 }
 
 async function onQfex(event) {
@@ -556,7 +557,7 @@ function openApp() {
   } catch {
     savedReal = null;
   }
-  if (savedReal && isIotaAddress(savedReal)) lookUpReal(savedReal);
+  if (findAccountRef(savedReal)) lookUpReal(findAccountRef(savedReal));
   const initial = new URLSearchParams(window.location.search).get('address');
   if (initial) {
     $('address').value = initial;
