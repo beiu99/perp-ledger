@@ -37,6 +37,7 @@ Server functions run in Frankfurt (`fra1`), because Ondo Perps isn't offered in 
 | Hyperliquid | EVM address | Public API, called from the browser | Account value, positions, PnL, volume, 30-day funding. Trading record uses the latest 2,000 fills. |
 | Arcus | EVM address | Public API, called from the browser | Same as above, for sub-account 0 and up to 5,000 fills. Wallets Arcus has not approved return 403 and show as Unknown. |
 | RISEx | EVM address | `/api/risex` reads its public API | Account value, positions, PnL, volume, lifetime fees and a trading record from up to 5,000 fills. Funding is left out until its sign is confirmed. |
+| Real Markets | IOTA address | Public indexer, called from the browser | Account value, positions, realised PnL after fees and funding, volume, lifetime fees, 30-day funding and trades. No key needed. Reads up to 10,000 fills and funding payments per lookup. |
 | QFEX | Your API key | `/api/private` | Equity, positions, PnL history, volume, fees and trades. Without a key it falls back to searching the top 100 by username. |
 | Variational | CSV upload | Parsed in the browser | PnL, funding, fees and volume for the dates in the export (up to 365 days and 10,000 rows per file). |
 | Ondo | Your API key | `/api/private` | Equity, positions, lifetime PnL and fees, volume and trades. |
@@ -45,7 +46,7 @@ A DEX with no data stays out of the totals, and each total says how many DEXs it
 
 ## Points
 
-The points panel lists DEXs with a live program: Arcus, RISEx, Variational and Ondo. Hyperliquid has no live program and QFEX's docs don't mention one, so both are left out. Update `PROGRAMS` in `public/lib/points.js` when programs start or end.
+The points panel lists DEXs with a live program: Arcus, RISEx, Variational and Ondo. Hyperliquid has no live program, and no program was found for QFEX or Real Markets, so all three are left out. Update `PROGRAMS` in `public/lib/points.js` when programs start or end.
 
 No DEX publishes a wallet's points, so visitors copy theirs from each points page. RISEx has a points endpoint, but it needs the wallet owner's sign-in. Entries are saved in the visitor's browser for that wallet.
 

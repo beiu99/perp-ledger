@@ -11,6 +11,7 @@ import { createHmac } from 'node:crypto';
 import { isSignedIn, passwordMatches, sessionCookie } from '../api/_auth.js';
 import { failureMessage, isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders, setting } from '../api/private.js';
 import { fromOndo, fromQfex, ondoFill, qfexFill, qfexPnlCheck } from '../public/lib/private.js';
+import { fromRaw as fromReal, isIotaAddress, loadReal, normalizeFill as realFill, normalizePosition as realPosition, pnlSeries } from '../public/lib/real.js';
 import { PROGRAMS, pointsRow, seasonStats } from '../public/lib/points.js';
 
 test('Hyperliquid PnL has fees removed and only closes count as trades', () => {
@@ -370,4 +371,83 @@ test('QFEX PnL adds up its daily changes', () => {
   });
   assert.ok(Math.abs(v.pnl.d7 - 590.08) < 1e-9);
   assert.equal(v.series.d7[1][1], 400);
+});
+
+const realAccount = { id: '0xa', equity: '111.525219', unrealised_pnl: '0', realised_pnl: '31.484938' };
+const realClose = { market_id: 'm', price: '76797.9', filled_value: '1320.92388', volume: '0.0172', is_taker: true, created_at_ms: 1793662485600, realised_pnl: '0.523025', realised_pnl_attribution: { trade_pnl: '0.774000', trade_fee: '-0.250975' }, fill_type: 'Normal', trade_context: 'CloseLong', order_id: '1' };
+
+test('Real Markets fills read fees as positive costs and spot closes', () => {
+  const f = realFill(realClose, { m: 'BTC-USDT' });
+  assert.equal(f.market, 'BTC');
+  assert.equal(f.fee, 0.250975);
+  assert.equal(f.notional, 1320.92388);
+  assert.equal(f.closing, true);
+  assert.equal(f.maker, false);
+  assert.equal(realFill({ ...realClose, trade_context: 'OpenLong' }).closing, false);
+});
+
+test('Real Markets positions show leverage from the margin rate', () => {
+  const p = realPosition({ direction: 'Short', size: '-2', average_entry_price: '100', current_imr: '0.08333333333333333', market_id: 'm', live_values: { notional_value: '190', unrealised_pnl: '10', estimated_liquidation_price: '180' } }, { m: 'SOL-USDT' });
+  assert.equal(p.side, 'Short');
+  assert.equal(p.leverage, 12);
+  assert.equal(p.notional, 190);
+});
+
+test('Real Markets totals use lifetime position figures and leave pending positions out', () => {
+  const now = 1793700000000;
+  const v = fromReal({
+    accounts: [realAccount],
+    positions: [
+      { size: '0', traded_turnover: '2641.07', realised_pnl_attribution: { trade_fee: '-0.25' } },
+      { size: '1', direction: 'Long', traded_turnover: '100', realised_pnl_attribution: { trade_fee: '-0.75' }, live_values: {} },
+    ],
+    fills: [realClose],
+    funding: [{ updated_at_ms: now - 1000, payment: '0.5' }],
+    markets: { m: 'BTC-USDT' },
+    capped: false,
+  }, { now });
+  assert.equal(v.pnl.all, 31.484938);
+  assert.equal(v.fees.value, 1);
+  assert.ok(Math.abs(v.volume.all - 2741.07) < 1e-9);
+  assert.equal(v.positions.length, 1);
+  assert.ok(Math.abs(v.pnl.d30 - 1.023025) < 1e-9);
+  assert.equal(v.funding30d.value, 0.5);
+  assert.ok(Math.abs(v.series.all.at(-1)[1] - 1.023025) < 1e-9);
+});
+
+test('Real Markets hides window figures rather than understate them when history is cut off', () => {
+  const v = fromReal({ accounts: [realAccount], positions: [], fills: [realClose], funding: [], markets: {}, capped: true });
+  assert.equal(v.pnl.d30, null);
+  assert.equal(v.volume.d30, null);
+  assert.equal(v.series, null);
+  assert.equal(v.pnl.all, 31.484938);
+});
+
+test('long PnL histories are thinned but keep the final total', () => {
+  const events = Array.from({ length: 2000 }, (_, i) => [i + 1, 1]);
+  const s = pnlSeries(events);
+  assert.ok(s.length <= 402);
+  assert.equal(s.at(-1)[1], 2000);
+  assert.equal(pnlSeries([]).length, 0);
+});
+
+test('Real Markets paging follows the cursor and an unknown address reads as no activity', async () => {
+  assert.equal((await loadReal('0xb', { fetchImpl: async () => respond(200, { data: [], pagination: {} }) })).status, 'empty');
+  const urls = [];
+  const fetchImpl = async (url) => {
+    const u = decodeURIComponent(String(url));
+    urls.push(u);
+    if (u.includes('/accounts?')) return respond(200, { data: [realAccount], pagination: {} });
+    if (u.includes('/fills') && !u.includes('p[c]')) return respond(200, { data: [realClose], pagination: { next_cursor: 'NEXT' } });
+    if (u.includes('/fills')) return respond(200, { data: [{ ...realClose, order_id: '2' }], pagination: {} });
+    return respond(200, { data: [], pagination: {} });
+  };
+  const v = await loadReal('0xb', { fetchImpl });
+  assert.equal(v.trades.fillCount, 2);
+  assert.ok(urls.some((u) => u.includes('f[account_ids]=0xa')));
+});
+
+test('IOTA addresses are told apart from EVM ones', () => {
+  assert.equal(isIotaAddress(`0x${'a'.repeat(64)}`), true);
+  assert.equal(isIotaAddress(`0x${'a'.repeat(40)}`), false);
 });

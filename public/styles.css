@@ -12,6 +12,7 @@
   --arcus: #7a3fc4;
   --risex: #c2570c;
   --qfex: #2563b8;
+  --real: #b0307a;
   --gain: #0a6b45;
   --loss: #b3261e;
   --warn: #8a5300;
@@ -31,6 +32,7 @@
     --arcus: #9a76de;
     --risex: #cf7a24;
     --qfex: #5693e0;
+    --real: #d1608f;
     --gain: #5ed3a0;
     --loss: #ff9d94;
     --warn: #eebf6a;
@@ -70,7 +72,7 @@ button[disabled] { opacity: .6; cursor: progress; }
 .field-error { color: var(--loss); margin: 6px 0 0; min-height: 1.5em; font-weight: 500; }
 
 /* The coverage strip: known ground is solid, unknown ground is hatched. */
-.coverage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; margin: 20px 0 32px; border-bottom: 4px solid var(--navy); }
+.coverage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin: 20px 0 32px; border-bottom: 4px solid var(--navy); }
 .venue { background: var(--surface); padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 148px; }
 .venue h3 { margin: 0; font: 700 1.05rem/1.2 'Bricolage Grotesque', Figtree, sans-serif; }
 .venue p { margin: 0; font-size: .875rem; color: var(--ink-2); }
@@ -126,6 +128,7 @@ button[disabled] { opacity: .6; cursor: progress; }
 .swatch-arcus { background: var(--arcus); }
 .swatch-risex { background: var(--risex); }
 .swatch-qfex { background: var(--qfex); }
+.swatch-real { background: var(--real); }
 .swatch-ink { background: var(--ink); }
 
 .panel-note { color: var(--ink-2); font-size: .875rem; margin: 0 0 10px; max-width: 70ch; }

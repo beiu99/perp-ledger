@@ -5,6 +5,7 @@ import { loadQfex } from './lib/qfex.js';
 import { loadRisex } from './lib/risex.js';
 import { PROGRAMS, pointsRow } from './lib/points.js';
 import { loadPrivate } from './lib/private.js';
+import { isIotaAddress, loadReal } from './lib/real.js';
 import { fileKind, parseCsv, summarizeExports } from './lib/variational.js';
 
 const $ = (id) => document.getElementById(id);
@@ -15,6 +16,7 @@ const VENUES = [
   { id: 'hyperliquid', name: 'Hyperliquid' },
   { id: 'arcus', name: 'Arcus' },
   { id: 'risex', name: 'RISEx' },
+  { id: 'real', name: 'Real Markets' },
   { id: 'qfex', name: 'QFEX' },
   { id: 'variational', name: 'Variational' },
   { id: 'ondo', name: 'Ondo' },
@@ -26,6 +28,7 @@ const state = {
     hyperliquid: { status: 'idle' },
     arcus: { status: 'idle' },
     risex: { status: 'idle' },
+    real: { status: 'input' },
     qfex: { status: 'input' },
     variational: { status: 'input' },
     ondo: { status: 'unsupported' },
@@ -35,7 +38,7 @@ const state = {
   range: 'd30',
 };
 
-const LINE_KEYS = { hyperliquid: 'hl', arcus: 'arcus', risex: 'risex', qfex: 'qfex' };
+const LINE_KEYS = { hyperliquid: 'hl', arcus: 'arcus', risex: 'risex', qfex: 'qfex', real: 'real' };
 
 function readSaved(address) {
   try {
@@ -87,6 +90,8 @@ function renderCoverage() {
   }).join('');
   const qfexForm = $('qfex-form');
   if (qfexForm) qfexForm.addEventListener('submit', onQfex);
+  const realForm = $('real-form');
+  if (realForm) realForm.addEventListener('submit', onReal);
   const file = $('variational-file');
   if (file) file.addEventListener('change', onFiles);
 }
@@ -101,6 +106,17 @@ function venueBody(id, v) {
     if (isCovered(v)) return line('Your account', v.fillsLoading ? 'Adding up your trade history…' : v.message ?? 'Read with your private API key.');
     if (v.status === 'error') return line('Could not read', v.message);
     return line('Not available', 'Ondo keeps account data behind a wallet sign-in, so an address alone cannot show it.');
+  }
+  if (id === 'real') {
+    const form = `<form id="real-form" aria-label="Look up a Real Markets account">
+      <input type="text" name="address" aria-label="IOTA wallet address" placeholder="IOTA address (0x…)" autocomplete="off" spellcheck="false" value="${esc(state.realAddress ?? '')}">
+      <button type="submit">Find</button>
+    </form>`;
+    if (v.status === 'loading') return line('Reading…') + form;
+    if (isCovered(v)) return line('Covered', v.trades?.capped ? `Trading record uses the latest ${v.trades.fillCount.toLocaleString('en-US')} fills.` : null) + form;
+    if (v.status === 'empty') return line('No activity', v.message) + form;
+    if (v.status === 'error') return line('Could not read', v.message) + form;
+    return line('Needs your IOTA address', 'Real Markets runs on IOTA, so its wallets are longer than EVM addresses.') + form;
   }
   if (id === 'qfex' && v.private) return line('Your account', 'Read with your private API key.');
   if (id === 'qfex') {
@@ -368,7 +384,7 @@ function renderPoints() {
   </table>`;
   const notes = [
     'Cost per point is your loss after fees divided by your points. A negative figure means you earned the points at a profit.',
-    "Hyperliquid has no live points program and QFEX's docs don't mention one, so they're left out.",
+    "Hyperliquid has no live points program, and I found none for QFEX or Real Markets, so they're left out.",
   ];
   if (rows.some((r) => r.incomplete)) {
     notes.push('Arcus figures cover your latest 5,000 fills, which don\'t reach the start of Season 1.');
@@ -380,7 +396,7 @@ function render() {
   renderCoverage();
   const list = VENUES.map(({ id, name }) => ({ id, name, v: state.venues[id] }));
   const rows = list.filter(({ v }) => isCovered(v));
-  const hasWallet = state.address !== null;
+  const hasWallet = state.address !== null || isCovered(state.venues.real);
   $('report').hidden = !hasWallet;
   if (!hasWallet) return;
   renderPoints();
@@ -445,6 +461,37 @@ function onLookup(event) {
   load(address.toLowerCase());
 }
 
+async function lookUpReal(address) {
+  state.realAddress = address;
+  state.venues.real = { status: 'loading' };
+  render();
+  try {
+    state.venues.real = await loadReal(address);
+    if (isCovered(state.venues.real)) {
+      try {
+        localStorage.setItem('realAddress', address);
+      } catch {
+        // The address just won't be remembered next time.
+      }
+    }
+  } catch (error) {
+    state.venues.real = { status: 'error', message: error.message };
+  }
+  render();
+}
+
+function onReal(event) {
+  event.preventDefault();
+  const address = new FormData(event.target).get('address').trim();
+  if (!isIotaAddress(address)) {
+    state.realAddress = address;
+    state.venues.real = { status: 'error', message: 'Enter an IOTA address: 0x followed by 64 letters and numbers.' };
+    render();
+    return;
+  }
+  lookUpReal(address);
+}
+
 async function onQfex(event) {
   event.preventDefault();
   const username = new FormData(event.target).get('username').trim();
@@ -503,6 +550,13 @@ function openApp() {
   $('gate').hidden = true;
   $('app').hidden = false;
   render();
+  let savedReal = null;
+  try {
+    savedReal = localStorage.getItem('realAddress');
+  } catch {
+    savedReal = null;
+  }
+  if (savedReal && isIotaAddress(savedReal)) lookUpReal(savedReal);
   const initial = new URLSearchParams(window.location.search).get('address');
   if (initial) {
     $('address').value = initial;
