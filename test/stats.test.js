@@ -10,7 +10,7 @@ import { fromRaw, normalizeFill as riseFill, normalizePosition as risePosition }
 import { createHmac } from 'node:crypto';
 import { isSignedIn, passwordMatches, sessionCookie } from '../api/_auth.js';
 import { failureMessage, isMyWallet, loadOndo, loadQfex, ondoHeaders, qfexHeaders, setting } from '../api/private.js';
-import { fromOndo, fromQfex, ondoFill, qfexFill, qfexPnlCheck } from '../public/lib/private.js';
+import { fromOndo, fromQfex, ondoFill, qfexFill } from '../public/lib/private.js';
 import { findAccountRef, fromRaw as fromReal, loadReal, normalizeFill as realFill, normalizePosition as realPosition, pnlSeries } from '../public/lib/real.js';
 import { PROGRAMS, pointsRow, seasonStats } from '../public/lib/points.js';
 
@@ -351,16 +351,6 @@ test('missing Ondo balance fields stay unknown instead of showing zero', () => {
   const v = fromOndo({ balance: {}, positions: [] });
   assert.equal(v.fees, null);
   assert.equal(v.pnl.all, null);
-});
-
-test('the QFEX check shows each way of reading the PnL points', () => {
-  const point = (value) => ({ window_start: '2026-11-01T00:00:00Z', value });
-  const [week, , all] = qfexPnlCheck({ pnl: { d7: { data: [point(10), point(-4), point(30)] } } });
-  assert.equal(week.latest, 30);
-  assert.equal(week.sum, 36);
-  assert.equal(week.change, 20);
-  assert.equal(all.count, 0);
-  assert.equal(all.latest, null);
 });
 
 test('QFEX PnL adds up its daily changes', () => {
