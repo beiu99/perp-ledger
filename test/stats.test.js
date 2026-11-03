@@ -487,6 +487,7 @@ test('average OI handles shorts and flips', () => {
 test('average OI is marked as an estimate when history is cut off', () => {
   const oi = averageOi([oiFill(2, 1)], [{ market: 'BTC', side: 'Long', size: 5, notional: 500 }], { capped: true, now: NOW });
   assert.equal(oi.d7.partial, true);
+  assert.equal(oi.all.partial, true);
   assert.ok(Math.abs(oi.d7.value - 500) < 100);
 });
 

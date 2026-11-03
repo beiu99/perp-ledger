@@ -164,6 +164,6 @@ export function averageOi(fills, positions, { capped = false, now = Date.now(), 
   return {
     d7: result(now - 7 * DAY_MS),
     d30: result(now - 30 * DAY_MS),
-    all: first === null ? { value: null, partial: false } : result(first),
+    all: first === null ? { value: null, partial: false } : { ...result(first), partial: capped || result(first).partial },
   };
 }
