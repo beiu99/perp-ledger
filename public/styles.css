@@ -17,6 +17,8 @@
   --loss: #ff9d94;
   --warn: #eebf6a;
   --hatch: #2b2b2b;
+  --gold: #c9a24b;
+  --gold-soft: rgba(201, 162, 75, .4);
 }
 
 * { box-sizing: border-box; }
@@ -28,7 +30,32 @@ body {
   font: 400 1rem/1.5 Figtree, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
-main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; }
+main { position: relative; max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; }
+
+/* Decorative only: these lines stay outside the text and never take clicks. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, transparent, var(--gold-soft) 18%, var(--gold-soft) 82%, transparent) calc(50% - 584px) 0 / 1px 100% no-repeat,
+    linear-gradient(to bottom, transparent, var(--gold-soft) 18%, var(--gold-soft) 82%, transparent) calc(50% + 584px) 0 / 1px 100% no-repeat;
+}
+.masthead { position: relative; }
+.masthead::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 35%;
+  pointer-events: none;
+  background: url('gold-lines.svg') right center / contain no-repeat;
+}
+.masthead > * { position: relative; z-index: 1; }
+.panel { border-top: 1px solid var(--gold-soft); }
 h1, h2, .brand, .total-value { font-family: 'Bricolage Grotesque', Figtree, system-ui, sans-serif; }
 h1 { font-size: clamp(2.2rem, 6vw, 4.2rem); line-height: 1.04; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 28px; max-width: 16ch; }
 h2 { font-size: 1.3rem; font-weight: 700; margin: 0; }
@@ -51,7 +78,7 @@ button[disabled] { opacity: .6; cursor: progress; }
 .field-error { color: var(--loss); margin: 6px 0 0; min-height: 1.5em; font-weight: 500; }
 
 /* The coverage strip: known ground is solid, unknown ground is hatched. */
-.coverage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin: 20px 0 32px; border-bottom: 4px solid var(--navy); }
+.coverage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin: 20px 0 32px; border-bottom: 1px solid var(--gold); }
 .venue { background: var(--surface); padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 148px; }
 .venue h3 { margin: 0; font: 700 1.05rem/1.2 'Bricolage Grotesque', Figtree, sans-serif; }
 .venue p { margin: 0; font-size: .875rem; color: var(--ink-2); }
@@ -60,7 +87,7 @@ button[disabled] { opacity: .6; cursor: progress; }
   background: repeating-linear-gradient(135deg, var(--surface) 0 9px, var(--hatch) 9px 10px);
 }
 .venue.unknown p, .venue.unknown h3 { background: var(--surface); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.venue.covered { box-shadow: inset 0 5px 0 var(--navy); }
+.venue.covered { box-shadow: inset 0 2px 0 var(--gold); }
 .venue form { display: flex; gap: 6px; margin-top: auto; }
 .venue input[type='text'] { padding: 7px 8px; font-size: .875rem; width: 100%; }
 .venue button, .file-label { font-size: .875rem; padding: 6px 10px; }
@@ -138,6 +165,10 @@ tr:last-child td { border-bottom: 0; }
 footer { margin-top: 32px; font-size: .875rem; color: var(--ink-3); max-width: 70ch; }
 .loading { color: var(--ink-2); }
 
+@media (max-width: 1190px) {
+  body::before { display: none; }
+  .masthead::after { display: none; }
+}
 @media (max-width: 900px) {
   .coverage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .totals { grid-template-columns: repeat(3, 1fr); }
